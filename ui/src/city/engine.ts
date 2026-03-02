@@ -186,7 +186,7 @@ export class CityEngine {
 
   resetCamera(): void {
     const mapPxW = MAP_W * TILE_SIZE;
-    this.camera.zoom = 2 * this.dpr;
+    this.camera.zoom = 3 * this.dpr;
     this.camera.x = mapPxW / 2 - this.canvas.width / (2 * this.camera.zoom);
     this.camera.y =
       12 * TILE_SIZE - this.canvas.height / (2 * this.camera.zoom);
