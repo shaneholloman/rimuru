@@ -13,6 +13,7 @@ import Hooks from "./pages/Hooks";
 import Settings from "./pages/Settings";
 import Terminal from "./pages/Terminal";
 import McpServers from "./pages/McpServers";
+import City from "./pages/City";
 import { applyTheme, getStoredTheme } from "./components/ThemeSwitcher";
 
 const PAGES: Record<string, React.ComponentType> = {
@@ -25,6 +26,7 @@ const PAGES: Record<string, React.ComponentType> = {
   plugins: Plugins,
   hooks: Hooks,
   mcp: McpServers,
+  city: City,
   settings: Settings,
   terminal: Terminal,
 };
