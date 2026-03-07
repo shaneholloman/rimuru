@@ -186,18 +186,6 @@ export interface HookConfig {
   error_count: number;
 }
 
-export interface HookExecution {
-  id: string;
-  hook_id: string;
-  hook_name: string;
-  event: string;
-  status: "success" | "failure" | "timeout";
-  duration_ms: number;
-  output: string | null;
-  error: string | null;
-  timestamp: string;
-}
-
 export interface AppConfig {
   api_port: number;
   theme: string;

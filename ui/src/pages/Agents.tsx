@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "../hooks/useQuery";
-import { apiPost, apiDelete } from "../api/client";
+import { apiPost } from "../api/client";
 import type { Agent, AgentStatus } from "../api/types";
 import AgentCard from "../components/AgentCard";
 
@@ -33,7 +33,7 @@ export default function Agents() {
 
   async function handleConnect(id: string) {
     try {
-      await apiPost(`/agents/${id}/connect`);
+      await apiPost("/agents/connect", { agent_id: id });
       refetch();
     } catch {
       // handled by UI
@@ -42,7 +42,7 @@ export default function Agents() {
 
   async function handleDisconnect(id: string) {
     try {
-      await apiDelete(`/agents/${id}/connect`);
+      await apiPost(`/agents/${id}/disconnect`);
       refetch();
     } catch {
       // handled by UI
