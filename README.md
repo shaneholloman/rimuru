@@ -342,7 +342,7 @@ cd ui && npm run build             # single-file production build
 
 ## License
 
-Licensed under the MIT License. See [LICENSE](LICENSE) for details.
+Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
