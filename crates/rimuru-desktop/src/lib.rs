@@ -45,6 +45,11 @@ pub fn run() {
                 .build(),
         )
         .setup(move |app| {
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            if let Err(e) = app.global_shortcut().register("CmdOrCtrl+Shift+R") {
+                tracing::warn!("Failed to register global shortcut: {}", e);
+            }
+
             let worker = RimuruWorker::new(&engine_url);
             let iii = worker.iii().clone();
             let kv = worker.kv().clone();
