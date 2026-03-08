@@ -68,16 +68,46 @@ async fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Resul
                     KeyCode::Char('q') => return Ok(()),
                     KeyCode::Tab => app.next_tab(),
                     KeyCode::BackTab => app.prev_tab(),
-                    KeyCode::Char('1') => app.tab = Tab::Dashboard,
-                    KeyCode::Char('2') => app.tab = Tab::Agents,
-                    KeyCode::Char('3') => app.tab = Tab::Sessions,
-                    KeyCode::Char('4') => app.tab = Tab::Costs,
-                    KeyCode::Char('5') => app.tab = Tab::Models,
-                    KeyCode::Char('6') => app.tab = Tab::Advisor,
-                    KeyCode::Char('7') => app.tab = Tab::Hooks,
-                    KeyCode::Char('8') => app.tab = Tab::Plugins,
-                    KeyCode::Char('9') => app.tab = Tab::Mcp,
-                    KeyCode::Char('0') => app.tab = Tab::Metrics,
+                    KeyCode::Char('1') => {
+                        app.tab = Tab::Dashboard;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('2') => {
+                        app.tab = Tab::Agents;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('3') => {
+                        app.tab = Tab::Sessions;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('4') => {
+                        app.tab = Tab::Costs;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('5') => {
+                        app.tab = Tab::Models;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('6') => {
+                        app.tab = Tab::Advisor;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('7') => {
+                        app.tab = Tab::Hooks;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('8') => {
+                        app.tab = Tab::Plugins;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('9') => {
+                        app.tab = Tab::Mcp;
+                        app.scroll = 0;
+                    }
+                    KeyCode::Char('0') => {
+                        app.tab = Tab::Metrics;
+                        app.scroll = 0;
+                    }
                     KeyCode::Down | KeyCode::Char('j') => app.scroll_down(),
                     KeyCode::Up | KeyCode::Char('k') => app.scroll_up(),
                     KeyCode::Char('t') => app.next_theme(),

@@ -406,14 +406,12 @@ async fn api_plugins_toggle(
     State(state): State<AppState>,
     Path((id, action)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    let enabled = action == "enable";
-    match call_function(
-        &state.kv,
-        "rimuru.plugins.toggle",
-        json!({"plugin_id": id, "enabled": enabled}),
-    )
-    .await
-    {
+    let function_id = if action == "enable" {
+        "rimuru.plugins.start"
+    } else {
+        "rimuru.plugins.stop"
+    };
+    match call_function(&state.kv, function_id, json!({"id": id})).await {
         Ok(v) => Json(v).into_response(),
         Err(s) => s.into_response(),
     }

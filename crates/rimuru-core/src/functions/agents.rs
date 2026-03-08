@@ -454,15 +454,36 @@ async fn sync_agent_sessions(
 
         if session.total_cost > 0.0 {
             if let Some(ref model) = session.model {
+                let model_lower = model.to_lowercase();
+                let provider = if model_lower.contains("claude") {
+                    "anthropic"
+                } else if model_lower.contains("gpt") || model_lower.contains("openai") {
+                    "openai"
+                } else if model_lower.contains("gemini") {
+                    "google"
+                } else if model_lower.contains("github") || model_lower.contains("copilot") {
+                    "github"
+                } else if model_lower.contains("deepseek") {
+                    "deepseek"
+                } else {
+                    "unknown"
+                };
+                let input_ratio = match provider {
+                    "anthropic" => 0.25,
+                    "openai" => 0.33,
+                    "google" => 0.30,
+                    "deepseek" => 0.15,
+                    _ => 0.30,
+                };
                 let mut cost_record = CostRecord::new(
                     agent.id,
                     agent.agent_type,
                     model.clone(),
-                    "anthropic".to_string(),
+                    provider.to_string(),
                     session.input_tokens,
                     session.output_tokens,
-                    session.total_cost * 0.3,
-                    session.total_cost * 0.7,
+                    session.total_cost * input_ratio,
+                    session.total_cost * (1.0 - input_ratio),
                 );
                 cost_record.recorded_at = session.started_at;
                 let record_id = cost_record.id.to_string();

@@ -43,14 +43,9 @@ impl HookRegistry {
             priority,
         };
 
-        self.handlers
-            .entry(event_type.to_string())
-            .or_default()
-            .push(handler);
-
-        if let Some(mut handlers) = self.handlers.get_mut(event_type) {
-            handlers.sort_by(|a, b| b.priority.cmp(&a.priority));
-        }
+        let mut entry = self.handlers.entry(event_type.to_string()).or_default();
+        entry.push(handler);
+        entry.sort_by(|a, b| b.priority.cmp(&a.priority));
 
         info!(
             "Registered hook handler '{}' for event '{}'",
