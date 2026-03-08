@@ -231,6 +231,12 @@ export function formatProvider(provider: string): string {
     open_a_i: "OpenAI",
     openai: "OpenAI",
     google: "Google",
+    deep_seek: "DeepSeek",
+    deepseek: "DeepSeek",
+    moonshot: "Moonshot",
+    zhipu: "Zhipu",
+    mistral: "Mistral",
+    meta: "Meta",
     openrouter: "OpenRouter",
     local: "Local",
   };

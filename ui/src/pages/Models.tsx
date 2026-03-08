@@ -10,6 +10,11 @@ const PROVIDER_COLORS: Record<string, string> = {
   anthropic: "#CC785C",
   openai: "#10a37f",
   google: "#4285f4",
+  deepseek: "#4D6BFE",
+  moonshot: "#8b5cf6",
+  zhipu: "#06b6d4",
+  mistral: "#f97316",
+  meta: "#0668E1",
   openrouter: "#c084fc",
   local: "#a89984",
 };
