@@ -457,7 +457,11 @@ async fn sync_agent_sessions(
                 let model_lower = model.to_lowercase();
                 let provider = if model_lower.contains("claude") {
                     "anthropic"
-                } else if model_lower.contains("gpt") || model_lower.contains("openai") {
+                } else if model_lower.contains("gpt")
+                    || model_lower.contains("openai")
+                    || model_lower.contains("o3")
+                    || model_lower.contains("o1")
+                {
                     "openai"
                 } else if model_lower.contains("gemini") {
                     "google"
@@ -465,6 +469,16 @@ async fn sync_agent_sessions(
                     "github"
                 } else if model_lower.contains("deepseek") {
                     "deepseek"
+                } else if model_lower.contains("kimi") || model_lower.contains("moonshot") {
+                    "moonshot"
+                } else if model_lower.contains("glm") || model_lower.contains("zhipu") {
+                    "zhipu"
+                } else if model_lower.contains("mistral") || model_lower.contains("codestral") {
+                    "mistral"
+                } else if model_lower.contains("llama") {
+                    "meta"
+                } else if model_lower.contains("qwen") {
+                    "alibaba"
                 } else {
                     "unknown"
                 };
@@ -473,6 +487,10 @@ async fn sync_agent_sessions(
                     "openai" => 0.33,
                     "google" => 0.30,
                     "deepseek" => 0.15,
+                    "moonshot" => 0.20,
+                    "zhipu" => 0.20,
+                    "mistral" => 0.25,
+                    "meta" => 0.25,
                     _ => 0.30,
                 };
                 let mut cost_record = CostRecord::new(

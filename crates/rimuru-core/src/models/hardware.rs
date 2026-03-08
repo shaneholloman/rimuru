@@ -91,28 +91,28 @@ pub fn local_equivalents() -> Vec<LocalEquivalent> {
     vec![
         LocalEquivalent {
             api_model_id: "claude-opus-4-6",
-            local_name: "Llama-3.1-70B",
-            params_b: 70.0,
+            local_name: "Qwen3-32B",
+            params_b: 32.0,
         },
         LocalEquivalent {
             api_model_id: "claude-sonnet-4-6",
-            local_name: "Qwen2.5-14B",
+            local_name: "Qwen3-14B",
             params_b: 14.0,
         },
         LocalEquivalent {
             api_model_id: "claude-haiku-3-5",
-            local_name: "Phi-3-mini-3.8B",
-            params_b: 3.8,
+            local_name: "Qwen3-4B",
+            params_b: 4.0,
         },
         LocalEquivalent {
             api_model_id: "gpt-4o",
-            local_name: "Mixtral-8x7B",
-            params_b: 12.9,
+            local_name: "Qwen3-32B",
+            params_b: 32.0,
         },
         LocalEquivalent {
             api_model_id: "gpt-4o-mini",
-            local_name: "Phi-3-mini-3.8B",
-            params_b: 3.8,
+            local_name: "Qwen3-8B",
+            params_b: 8.0,
         },
         LocalEquivalent {
             api_model_id: "o3",
@@ -120,14 +120,64 @@ pub fn local_equivalents() -> Vec<LocalEquivalent> {
             params_b: 32.0,
         },
         LocalEquivalent {
+            api_model_id: "o3-mini",
+            local_name: "Phi-4-reasoning",
+            params_b: 14.0,
+        },
+        LocalEquivalent {
             api_model_id: "gemini-2.5-pro",
-            local_name: "Llama-3.1-70B",
-            params_b: 70.0,
+            local_name: "Qwen3-235B-A22B",
+            params_b: 22.0,
         },
         LocalEquivalent {
             api_model_id: "gemini-2.5-flash",
-            local_name: "Llama-3.2-3B",
-            params_b: 3.0,
+            local_name: "Qwen3-4B",
+            params_b: 4.0,
+        },
+        LocalEquivalent {
+            api_model_id: "deepseek-v3",
+            local_name: "DeepSeek-R1-Distill-Qwen-32B",
+            params_b: 32.0,
+        },
+        LocalEquivalent {
+            api_model_id: "deepseek-r1",
+            local_name: "DeepSeek-R1-Distill-Qwen-32B",
+            params_b: 32.0,
+        },
+        LocalEquivalent {
+            api_model_id: "kimi-k2.5",
+            local_name: "Qwen3-32B",
+            params_b: 32.0,
+        },
+        LocalEquivalent {
+            api_model_id: "glm-5",
+            local_name: "Qwen3-32B",
+            params_b: 32.0,
+        },
+        LocalEquivalent {
+            api_model_id: "glm-4",
+            local_name: "Qwen3-14B",
+            params_b: 14.0,
+        },
+        LocalEquivalent {
+            api_model_id: "mistral-large",
+            local_name: "Mistral-Small-24B",
+            params_b: 24.0,
+        },
+        LocalEquivalent {
+            api_model_id: "codestral",
+            local_name: "Devstral-Small-2",
+            params_b: 24.0,
+        },
+        LocalEquivalent {
+            api_model_id: "llama-4-maverick",
+            local_name: "Llama-4-Maverick-17B-128E",
+            params_b: 17.0,
+        },
+        LocalEquivalent {
+            api_model_id: "llama-4-scout",
+            local_name: "Llama-4-Scout-17B",
+            params_b: 17.0,
         },
     ]
 }
