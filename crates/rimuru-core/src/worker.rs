@@ -1,4 +1,4 @@
-use iii_sdk::{register_worker, InitOptions, TriggerRequest, III};
+use iii_sdk::{III, InitOptions, TriggerRequest, register_worker};
 use serde_json::json;
 use tracing::info;
 
@@ -18,7 +18,7 @@ impl RimuruWorker {
     }
 
     pub async fn start(&self) -> Result<(), RimuruError> {
-        info!("Connected to iii engine");
+        info!("Initializing rimuru worker (connection started by register_worker)");
 
         let kv = StateKV::new(self.iii.clone());
         functions::register_all(&self.iii, &kv);

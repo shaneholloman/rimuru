@@ -1,4 +1,4 @@
-use iii_sdk::{RegisterTriggerInput, III};
+use iii_sdk::{III, RegisterTriggerInput};
 use serde_json::json;
 use tracing::info;
 
@@ -8,10 +8,22 @@ struct Schedule {
 }
 
 const SCHEDULES: &[Schedule] = &[
-    Schedule { cron: "0 */5 * * * *", function_id: "rimuru.metrics.collect" },
-    Schedule { cron: "0 0 */6 * * *", function_id: "rimuru.models.sync" },
-    Schedule { cron: "0 0 0 * * *", function_id: "rimuru.costs.daily_rollup" },
-    Schedule { cron: "0 0 1 * * *", function_id: "rimuru.sessions.cleanup" },
+    Schedule {
+        cron: "0 */5 * * * *",
+        function_id: "rimuru.metrics.collect",
+    },
+    Schedule {
+        cron: "0 0 */6 * * *",
+        function_id: "rimuru.models.sync",
+    },
+    Schedule {
+        cron: "0 0 0 * * *",
+        function_id: "rimuru.costs.daily_rollup",
+    },
+    Schedule {
+        cron: "0 0 1 * * *",
+        function_id: "rimuru.sessions.cleanup",
+    },
 ];
 
 pub fn register(iii: &III) {

@@ -1,13 +1,10 @@
-use rimuru_core::{RimuruWorker, DEFAULT_ENGINE_URL};
+use rimuru_core::{DEFAULT_ENGINE_URL, RimuruWorker};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::from_default_env()
-                .add_directive("rimuru=info".parse()?),
-        )
+        .with_env_filter(EnvFilter::from_default_env().add_directive("rimuru=info".parse()?))
         .init();
 
     let engine_url =

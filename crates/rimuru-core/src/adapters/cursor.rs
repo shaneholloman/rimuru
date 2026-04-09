@@ -126,13 +126,13 @@ impl CursorAdapter {
             }
         }
 
-        if let Ok(metadata) = std::fs::metadata(&workspace_json) {
-            if let Ok(modified) = metadata.modified() {
-                let elapsed = modified.elapsed().unwrap_or_default();
-                if elapsed.as_secs() > 3600 {
-                    session.status = SessionStatus::Completed;
-                    session.ended_at = Some(chrono::DateTime::<Utc>::from(modified));
-                }
+        if let Ok(metadata) = std::fs::metadata(&workspace_json)
+            && let Ok(modified) = metadata.modified()
+        {
+            let elapsed = modified.elapsed().unwrap_or_default();
+            if elapsed.as_secs() > 3600 {
+                session.status = SessionStatus::Completed;
+                session.ended_at = Some(chrono::DateTime::<Utc>::from(modified));
             }
         }
 

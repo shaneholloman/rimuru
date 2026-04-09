@@ -38,11 +38,7 @@ fn bool_field(v: &Value, key: &str) -> bool {
 }
 
 fn yes_no(val: bool) -> &'static str {
-    if val {
-        "yes"
-    } else {
-        "no"
-    }
+    if val { "yes" } else { "no" }
 }
 
 fn status_cell(status: &str, colors: &[(&str, Color)]) -> Cell {

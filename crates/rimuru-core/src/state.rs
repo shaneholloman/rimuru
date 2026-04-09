@@ -1,10 +1,13 @@
-use iii_sdk::{TriggerRequest, III};
-use serde::{de::DeserializeOwned, Serialize};
+use iii_sdk::{III, TriggerRequest};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
+use tracing::warn;
 
 use crate::error::RimuruError;
 
 type Result<T> = std::result::Result<T, RimuruError>;
+
+const DEFAULT_STATE_TIMEOUT_MS: u64 = 10_000;
 
 #[derive(Clone)]
 pub struct StateKV {
@@ -23,7 +26,7 @@ impl StateKV {
                 function_id: "state::get".to_string(),
                 payload: json!({"scope": scope, "key": key}),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
@@ -43,7 +46,7 @@ impl StateKV {
                 function_id: "state::set".to_string(),
                 payload: json!({"scope": scope, "key": key, "value": value}),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
@@ -56,7 +59,7 @@ impl StateKV {
                 function_id: "state::delete".to_string(),
                 payload: json!({"scope": scope, "key": key}),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
@@ -70,7 +73,7 @@ impl StateKV {
                 function_id: "state::list".to_string(),
                 payload: json!({"scope": scope}),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
@@ -78,15 +81,17 @@ impl StateKV {
         if let Some(arr) = result.as_array() {
             let keys: Vec<String> = arr
                 .iter()
-                .filter_map(|v| {
-                    v.get("key")
-                        .and_then(|k| k.as_str())
-                        .map(|s| s.to_string())
-                })
+                .filter_map(|v| v.get("key").and_then(|k| k.as_str()).map(|s| s.to_string()))
                 .collect();
             Ok(keys)
         } else {
-            Ok(vec![])
+            warn!(
+                "state::list for scope '{}' returned unexpected format: {}",
+                scope, result
+            );
+            Err(RimuruError::Bridge(format!(
+                "state::list returned non-array for scope '{scope}'"
+            )))
         }
     }
 
@@ -97,7 +102,7 @@ impl StateKV {
                 function_id: "state::list".to_string(),
                 payload: json!({"scope": scope}),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
@@ -134,7 +139,7 @@ impl StateKV {
                     "ops": [{"type": "set", "path": field, "value": json_val}]
                 }),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
@@ -152,17 +157,27 @@ impl StateKV {
                     "ops": [{"type": "increment", "path": field, "by": by}]
                 }),
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(DEFAULT_STATE_TIMEOUT_MS),
             })
             .await
             .map_err(|e| RimuruError::Bridge(e.to_string()))?;
 
-        let new_val = result
+        match result
             .get("new_value")
             .and_then(|v| v.get(field))
             .and_then(|v| v.as_i64())
-            .unwrap_or(by);
-        Ok(new_val)
+        {
+            Some(val) => Ok(val),
+            None => {
+                warn!(
+                    "state::update increment for {}/{}.'{}' (by={}) returned unexpected format: {}",
+                    scope, key, field, by, result
+                );
+                Err(RimuruError::Bridge(format!(
+                    "state::update increment returned unexpected result for {scope}/{key}.'{field}'"
+                )))
+            }
+        }
     }
 
     pub fn iii(&self) -> &III {

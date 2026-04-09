@@ -1,6 +1,6 @@
 use anyhow::Result;
 use iii_sdk::III;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::output::{self, OutputFormat};
 
