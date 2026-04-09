@@ -3,7 +3,7 @@ mod output;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use iii_sdk::III;
+use iii_sdk::{InitOptions, register_worker};
 use output::OutputFormat;
 
 #[derive(Parser)]
@@ -204,8 +204,7 @@ async fn main() -> Result<()> {
         return open_ui(*port);
     }
 
-    let iii = III::new(&cli.engine_url);
-    iii.connect().await?;
+    let iii = register_worker(&cli.engine_url, InitOptions::default());
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     let result = match cli.command {
