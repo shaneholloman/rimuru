@@ -109,7 +109,7 @@ fn register_utilization(iii: &III, kv: &StateKV) {
                         let model = s.model.clone().unwrap_or_else(|| "unknown".to_string());
                         let ctx_size = model_context_window(&model);
 
-                        let used = last_turn_input_tokens(&s.metadata).unwrap_or(s.input_tokens);
+                        let used = last_turn_context_size(&s.metadata).unwrap_or(s.input_tokens);
 
                         let pct = if ctx_size > 0 {
                             (used as f64 / ctx_size as f64) * 100.0
@@ -183,13 +183,19 @@ fn register_waste(iii: &III, kv: &StateKV) {
     );
 }
 
-fn last_turn_input_tokens(metadata: &Value) -> Option<u64> {
-    metadata
-        .get("turns")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.last())
-        .and_then(|turn| turn.get("input_tokens"))
+fn last_turn_context_size(metadata: &Value) -> Option<u64> {
+    let turns = metadata.get("turns").and_then(|v| v.as_array())?;
+    let turn = turns.last()?;
+    let input = turn
+        .get("input_tokens")
         .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let cache_read = turn.get("cache_read").and_then(|v| v.as_u64()).unwrap_or(0);
+    let cache_write = turn
+        .get("cache_write")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    Some(input + cache_read + cache_write)
 }
 
 fn model_context_window(model: &str) -> u64 {
