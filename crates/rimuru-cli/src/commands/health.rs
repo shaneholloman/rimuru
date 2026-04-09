@@ -10,7 +10,7 @@ pub async fn check(iii: &III, format: &OutputFormat) -> Result<()> {
             function_id: "rimuru.health.check".to_string(),
             payload: json!({}),
             action: None,
-            timeout_ms: None,
+            timeout_ms: Some(5_000),
         })
         .await?;
     println!("{}", output::format_health(&result, format));

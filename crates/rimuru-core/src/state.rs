@@ -118,7 +118,13 @@ impl StateKV {
                 .collect();
             Ok(items)
         } else {
-            Ok(vec![])
+            warn!(
+                "state::list for scope '{}' returned unexpected format: {}",
+                scope, result
+            );
+            Err(RimuruError::Bridge(format!(
+                "state::list returned non-array for scope '{scope}'"
+            )))
         }
     }
 

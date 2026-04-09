@@ -205,7 +205,16 @@ async fn main() -> Result<()> {
     }
 
     let iii = register_worker(&cli.engine_url, InitOptions::default());
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    for _ in 0..20 {
+        if matches!(
+            iii.get_connection_state(),
+            iii_sdk::IIIConnectionState::Connected
+        ) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 
     let result = match cli.command {
         Commands::Agents { action } => match action {

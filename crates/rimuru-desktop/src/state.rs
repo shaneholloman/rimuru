@@ -30,7 +30,7 @@ impl AppState {
                 function_id: function_id.to_string(),
                 payload: input,
                 action: None,
-                timeout_ms: None,
+                timeout_ms: Some(30_000),
             })
             .await
             .map_err(|e| format!("{}: {}", function_id, e))
