@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod context;
 pub mod cost;
 pub mod hardware;
 pub mod metrics;
@@ -7,6 +8,7 @@ pub mod plugin;
 pub mod session;
 
 pub use agent::*;
+pub use context::*;
 pub use cost::*;
 pub use hardware::*;
 pub use metrics::*;

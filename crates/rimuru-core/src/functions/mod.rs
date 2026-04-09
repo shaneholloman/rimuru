@@ -1,5 +1,6 @@
 pub mod agents;
 pub mod config;
+pub mod context;
 pub mod costs;
 pub mod hardware;
 pub mod health;
@@ -18,6 +19,7 @@ use crate::state::StateKV;
 
 pub fn register_all(iii: &III, kv: &StateKV) {
     agents::register(iii, kv);
+    context::register(iii, kv);
     sessions::register(iii, kv);
     costs::register(iii, kv);
     models::register(iii, kv);
