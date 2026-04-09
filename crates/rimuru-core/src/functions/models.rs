@@ -12,7 +12,7 @@ pub fn register(iii: &III, kv: &StateKV) {
     register_get(iii, kv);
 }
 
-fn hardcoded_models() -> Vec<ModelInfo> {
+pub(crate) fn hardcoded_models() -> Vec<ModelInfo> {
     let now = Utc::now();
     vec![
         ModelInfo {

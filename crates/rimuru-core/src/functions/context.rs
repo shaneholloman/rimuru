@@ -1,4 +1,5 @@
 use iii_sdk::{III, RegisterFunctionMessage};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::sysutil::{kv_err, require_str};
@@ -31,10 +32,10 @@ fn register_breakdown(iii: &III, kv: &StateKV) {
                     return Ok(serde_json::to_value(breakdown).unwrap_or_default());
                 }
 
-                let sessions: Vec<Session> = kv.list("sessions").await.map_err(kv_err)?;
-                let session = sessions
-                    .iter()
-                    .find(|s| s.id.to_string() == session_id)
+                let session: Session = kv
+                    .get("sessions", &session_id)
+                    .await
+                    .map_err(kv_err)?
                     .ok_or_else(|| {
                         iii_sdk::IIIError::Handler(format!("Session not found: {}", session_id))
                     })?;
@@ -72,7 +73,7 @@ fn register_breakdown_by_session(iii: &III, kv: &StateKV) {
             let kv = kv.clone();
             async move {
                 let breakdowns: Vec<ContextBreakdown> =
-                    kv.list("context_breakdowns").await.unwrap_or_default();
+                    kv.list("context_breakdowns").await.map_err(kv_err)?;
 
                 Ok(json!({
                     "breakdowns": breakdowns,
@@ -139,42 +140,32 @@ fn register_waste(iii: &III, kv: &StateKV) {
             let kv = kv.clone();
             async move {
                 let breakdowns: Vec<ContextBreakdown> =
-                    kv.list("context_breakdowns").await.unwrap_or_default();
+                    kv.list("context_breakdowns").await.map_err(kv_err)?;
 
-                let mut waste_reports: Vec<Value> = breakdowns
+                let mut waste_reports: Vec<WasteReport> = breakdowns
                     .iter()
                     .filter(|b| b.total_tokens > 0)
                     .map(|b| {
-                        json!({
-                            "session_id": b.session_id,
-                            "total_tokens": b.total_tokens,
-                            "tool_schema_tokens": b.tool_schema_tokens,
-                            "bash_output_tokens": b.bash_output_tokens,
-                            "mcp_tokens": b.mcp_tokens,
-                            "waste_percent": b.waste_percent(),
-                            "potential_savings": b.tool_schema_tokens + b.bash_output_tokens,
-                        })
+                        let potential_savings = b.tool_schema_tokens + b.bash_output_tokens;
+                        WasteReport {
+                            session_id: b.session_id,
+                            total_tokens: b.total_tokens,
+                            tool_schema_tokens: b.tool_schema_tokens,
+                            bash_output_tokens: b.bash_output_tokens,
+                            mcp_tokens: b.mcp_tokens,
+                            waste_percent: b.waste_percent(),
+                            potential_savings,
+                        }
                     })
                     .collect();
 
                 waste_reports.sort_by(|a, b| {
-                    let a_waste = a
-                        .get("waste_percent")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0);
-                    let b_waste = b
-                        .get("waste_percent")
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(0.0);
-                    b_waste
-                        .partial_cmp(&a_waste)
+                    b.waste_percent
+                        .partial_cmp(&a.waste_percent)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
 
-                let total_waste: u64 = waste_reports
-                    .iter()
-                    .filter_map(|r| r.get("potential_savings").and_then(|v| v.as_u64()))
-                    .sum();
+                let total_waste: u64 = waste_reports.iter().map(|r| r.potential_savings).sum();
 
                 Ok(json!({
                     "sessions": waste_reports,
@@ -187,14 +178,21 @@ fn register_waste(iii: &III, kv: &StateKV) {
 }
 
 fn model_context_window(model: &str) -> u64 {
-    match model {
-        m if m.contains("opus") => 200_000,
-        m if m.contains("sonnet") => 200_000,
-        m if m.contains("haiku") => 200_000,
-        m if m.contains("gpt-5") => 1_000_000,
-        m if m.contains("gpt-4o") => 128_000,
-        m if m.contains("gpt-4") => 128_000,
-        m if m.contains("gemini") => 1_000_000,
-        _ => 200_000,
-    }
+    let models = super::models::hardcoded_models();
+    models
+        .iter()
+        .find(|m| model.contains(&m.id))
+        .map(|m| m.context_window)
+        .unwrap_or(200_000)
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct WasteReport {
+    session_id: uuid::Uuid,
+    total_tokens: u64,
+    tool_schema_tokens: u64,
+    bash_output_tokens: u64,
+    mcp_tokens: u64,
+    waste_percent: f64,
+    potential_savings: u64,
 }

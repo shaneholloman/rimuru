@@ -270,7 +270,8 @@ impl ClaudeCodeAdapter {
                             "text" => {
                                 let text_est = block
                                     .get("text")
-                                    .map(|v| v.to_string().len() as u64 / 4)
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.len() as u64 / 4)
                                     .unwrap_or(0);
 
                                 match role {
