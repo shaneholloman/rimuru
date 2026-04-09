@@ -1,4 +1,4 @@
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{kv_err, require_str};
@@ -13,7 +13,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_dispatch(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.hooks.dispatch", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.hooks.dispatch".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let event_type = require_str(&input, "event_type")?;
@@ -36,7 +36,12 @@ fn register_dispatch(iii: &III, kv: &StateKV) {
 
             for hook in &matching {
                 let invoke_result: Result<Value, iii_sdk::IIIError> =
-                    iii_ref.trigger(&hook.function_id, payload.clone()).await;
+                    iii_ref.trigger(iii_sdk::TriggerRequest {
+                        function_id: hook.function_id.clone(),
+                        payload: payload.clone(),
+                        action: None,
+                        timeout_ms: None,
+                    }).await;
 
                 match invoke_result {
                     Ok(result) => {
@@ -70,7 +75,7 @@ fn register_dispatch(iii: &III, kv: &StateKV) {
 
 fn register_register(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.hooks.register", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.hooks.register".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let event_type = require_str(&input, "event_type")?;
@@ -113,7 +118,7 @@ fn register_register(iii: &III, kv: &StateKV) {
 }
 
 fn register_list(iii: &III, _kv: &StateKV) {
-    iii.register_function("rimuru.hooks.list", move |_input: Value| async move {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.hooks.list".to_string()), move |_input: Value| async move {
         let hooks = crate::discovery::discover_hooks().await;
 
         let mut event_types: Vec<String> = hooks

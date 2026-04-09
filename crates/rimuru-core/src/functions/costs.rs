@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{NaiveDate, Utc};
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -48,7 +48,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_record(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.costs.record", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.costs.record".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id_str = require_str(&input, "agent_id")?;
@@ -173,7 +173,7 @@ fn register_record(iii: &III, kv: &StateKV) {
 
 fn register_summary(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.costs.summary", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.costs.summary".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
@@ -281,7 +281,7 @@ fn register_summary(iii: &III, kv: &StateKV) {
 
 fn register_daily(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.costs.daily", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.costs.daily".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let days = input.get("days").and_then(|v| v.as_u64()).unwrap_or(30);
@@ -342,7 +342,7 @@ fn register_daily(iii: &III, kv: &StateKV) {
 
 fn register_by_agent(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.costs.by_agent", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.costs.by_agent".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id_str = require_str(&input, "agent_id")?;
@@ -404,7 +404,7 @@ fn register_by_agent(iii: &III, kv: &StateKV) {
 
 fn register_daily_rollup(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.costs.daily_rollup", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.costs.daily_rollup".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let date_str = input.get("date").and_then(|v| v.as_str()).unwrap_or("");

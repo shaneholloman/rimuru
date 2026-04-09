@@ -1,5 +1,5 @@
 use chrono::Utc;
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{kv_err, require_str};
@@ -272,7 +272,7 @@ fn hardcoded_models() -> Vec<ModelInfo> {
 
 fn register_list(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.models.list", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.models.list".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let stored: Vec<ModelInfo> = kv.list("model_info").await.map_err(kv_err)?;
@@ -303,7 +303,7 @@ fn register_list(iii: &III, kv: &StateKV) {
 
 fn register_sync(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.models.sync", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.models.sync".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let provider_filter = input
@@ -360,7 +360,7 @@ fn register_sync(iii: &III, kv: &StateKV) {
 
 fn register_get(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.models.get", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.models.get".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let model_id = require_str(&input, "model_id")?;

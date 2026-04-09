@@ -1,5 +1,5 @@
 use chrono::Utc;
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use crate::models::{
@@ -146,7 +146,7 @@ fn register_check(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
     let boot_time = Utc::now();
 
-    iii.register_function("rimuru.health.check", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.health.check".to_string()), move |_input: Value| {
         let kv = kv.clone();
         let boot_time = boot_time;
         async move {

@@ -1,5 +1,5 @@
 use chrono::Utc;
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_list(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.sessions.list", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.sessions.list".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let sessions: Vec<Session> = kv.list("sessions").await.map_err(kv_err)?;
@@ -47,7 +47,7 @@ fn register_list(iii: &III, kv: &StateKV) {
 
 fn register_get(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.sessions.get", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.sessions.get".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let session_id = require_str(&input, "session_id")?;
@@ -73,7 +73,7 @@ fn register_get(iii: &III, kv: &StateKV) {
 
 fn register_active(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.sessions.active", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.sessions.active".to_string()), move |_input: Value| {
         let kv = kv.clone();
         async move {
             let sessions: Vec<Session> = kv.list("sessions").await.map_err(kv_err)?;
@@ -117,7 +117,7 @@ fn register_active(iii: &III, kv: &StateKV) {
 
 fn register_history(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.sessions.history", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.sessions.history".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let sessions: Vec<Session> = kv.list("sessions").await.map_err(kv_err)?;
@@ -172,7 +172,7 @@ fn register_history(iii: &III, kv: &StateKV) {
 
 fn register_cleanup(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.sessions.cleanup", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.sessions.cleanup".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let max_age_days = input

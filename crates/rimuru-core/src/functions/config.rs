@@ -1,4 +1,4 @@
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{kv_err, require_str};
@@ -35,7 +35,7 @@ fn default_config() -> Value {
 
 fn register_get(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.config.get", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.config.get".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let key = input.get("key").and_then(|v| v.as_str());
@@ -115,7 +115,7 @@ fn register_get(iii: &III, kv: &StateKV) {
 
 fn register_set(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.config.set", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.config.set".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let key = require_str(&input, "key")?;

@@ -1,5 +1,5 @@
 use chrono::Utc;
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 use tracing::{info, warn};
 
@@ -26,7 +26,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_list(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.list", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.list".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agents: Vec<Agent> = kv.list("agents").await.map_err(kv_err)?;
@@ -61,7 +61,7 @@ fn register_list(iii: &III, kv: &StateKV) {
 
 fn register_get(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.get", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.get".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id = require_str(&input, "agent_id")?;
@@ -89,7 +89,7 @@ fn register_get(iii: &III, kv: &StateKV) {
 
 fn register_create(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.create", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.create".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_type: AgentType = serde_json::from_value(
@@ -140,7 +140,7 @@ fn register_create(iii: &III, kv: &StateKV) {
 
 fn register_update(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.update", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.update".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id = require_str(&input, "agent_id")?;
@@ -181,7 +181,7 @@ fn register_update(iii: &III, kv: &StateKV) {
 
 fn register_delete(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.delete", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.delete".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id = require_str(&input, "agent_id")?;
@@ -205,7 +205,7 @@ fn register_delete(iii: &III, kv: &StateKV) {
 
 fn register_status(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.status", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.status".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id = require_str(&input, "agent_id")?;
@@ -274,7 +274,7 @@ fn agent_checks() -> Vec<(AgentType, Vec<std::path::PathBuf>)> {
 
 fn register_detect(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.detect", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.detect".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let auto_register = input
@@ -332,7 +332,7 @@ fn register_detect(iii: &III, kv: &StateKV) {
 
 fn register_connect(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.connect", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.connect".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_type_str = require_str(&input, "agent_type")?;
@@ -384,7 +384,7 @@ fn register_connect(iii: &III, kv: &StateKV) {
 
 fn register_disconnect(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.disconnect", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.disconnect".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let agent_id = require_str(&input, "agent_id")?;
@@ -554,7 +554,7 @@ async fn update_agent_after_sync(
 
 fn register_sync(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.agents.sync", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.agents.sync".to_string()), move |_input: Value| {
         let kv = kv.clone();
         async move {
             let agents: Vec<Agent> = kv.list("agents").await.unwrap_or_default();

@@ -1,4 +1,4 @@
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{kv_err, parse_meminfo_kb, parse_vm_stat_value, run_cmd};
@@ -20,7 +20,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_detect(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.hardware.detect", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.hardware.detect".to_string()), move |_input: Value| {
         let kv = kv.clone();
         async move {
             let hw = detect_hardware().await;
@@ -34,7 +34,7 @@ fn register_detect(iii: &III, kv: &StateKV) {
 
 fn register_get(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.hardware.get", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.hardware.get".to_string()), move |_input: Value| {
         let kv = kv.clone();
         async move {
             let hw: Option<HardwareInfo> =
@@ -55,7 +55,7 @@ fn register_get(iii: &III, kv: &StateKV) {
 
 fn register_assess(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.advisor.assess", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.advisor.assess".to_string()), move |_input: Value| {
         let kv = kv.clone();
         async move {
             let hw: Option<HardwareInfo> =
@@ -133,7 +133,7 @@ fn register_assess(iii: &III, kv: &StateKV) {
 
 fn register_catalog(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.advisor.catalog", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.advisor.catalog".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let hw: Option<HardwareInfo> =

@@ -1,4 +1,4 @@
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{kv_err, require_str};
@@ -60,7 +60,7 @@ async fn run_skillkit_command(args: &[&str]) -> Result<Value, iii_sdk::IIIError>
 
 fn register_search(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.skillkit.search", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.skillkit.search".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let query = require_str(&input, "query")?;
@@ -98,7 +98,7 @@ fn register_search(iii: &III, kv: &StateKV) {
 }
 
 fn register_install(iii: &III, _kv: &StateKV) {
-    iii.register_function("rimuru.skillkit.install", move |input: Value| async move {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.skillkit.install".to_string()), move |input: Value| async move {
         let skill_name = require_str(&input, "skill")?;
 
         let agent = input
@@ -124,8 +124,8 @@ fn register_install(iii: &III, _kv: &StateKV) {
 }
 
 fn register_translate(iii: &III, _kv: &StateKV) {
-    iii.register_function(
-        "rimuru.skillkit.translate",
+    iii.register_function_with(
+        RegisterFunctionMessage::with_id("rimuru.skillkit.translate".to_string()),
         move |input: Value| async move {
             let skill_name = require_str(&input, "skill")?;
 
@@ -145,7 +145,7 @@ fn register_translate(iii: &III, _kv: &StateKV) {
 
 fn register_recommend(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.skillkit.recommend", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.skillkit.recommend".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let context = input

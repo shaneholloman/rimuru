@@ -1,5 +1,5 @@
 use chrono::Utc;
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{collect_cpu_usage, collect_memory_info, kv_err};
@@ -14,7 +14,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_current(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.metrics.current", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.metrics.current".to_string()), move |_input: Value| {
         let kv = kv.clone();
         async move {
             let metrics: Option<SystemMetrics> =
@@ -33,7 +33,7 @@ fn register_current(iii: &III, kv: &StateKV) {
 
 fn register_history(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.metrics.history", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.metrics.history".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let limit = input.get("limit").and_then(|v| v.as_u64()).unwrap_or(60) as usize;
@@ -73,7 +73,7 @@ fn register_collect(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
     let start_time = std::time::Instant::now();
 
-    iii.register_function("rimuru.metrics.collect", move |_input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.metrics.collect".to_string()), move |_input: Value| {
         let kv = kv.clone();
         let start_time = start_time;
         async move {

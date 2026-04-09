@@ -1,5 +1,5 @@
 use chrono::Utc;
-use iii_sdk::III;
+use iii_sdk::{III, RegisterFunctionMessage};
 use serde_json::{json, Value};
 
 use super::sysutil::{kv_err, require_str};
@@ -15,7 +15,7 @@ pub fn register(iii: &III, kv: &StateKV) {
 
 fn register_install(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.plugins.install", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.plugins.install".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let plugin_id = require_str(&input, "id")?;
@@ -132,7 +132,7 @@ fn register_install(iii: &III, kv: &StateKV) {
 
 fn register_uninstall(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
-    iii.register_function("rimuru.plugins.uninstall", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.plugins.uninstall".to_string()), move |input: Value| {
         let kv = kv.clone();
         async move {
             let plugin_id = require_str(&input, "id")?;
@@ -177,7 +177,7 @@ fn register_uninstall(iii: &III, kv: &StateKV) {
 }
 
 fn register_list(iii: &III, _kv: &StateKV) {
-    iii.register_function("rimuru.plugins.list", move |_input: Value| async move {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.plugins.list".to_string()), move |_input: Value| async move {
         let result = crate::discovery::discover_plugins().await;
         Ok(json!({
             "plugins": result,
@@ -188,7 +188,7 @@ fn register_list(iii: &III, _kv: &StateKV) {
 
 fn register_lifecycle(iii: &III, kv: &StateKV) {
     let kv_start = kv.clone();
-    iii.register_function("rimuru.plugins.start", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.plugins.start".to_string()), move |input: Value| {
         let kv = kv_start.clone();
         async move {
             let plugin_id = require_str(&input, "id")?;
@@ -260,7 +260,7 @@ fn register_lifecycle(iii: &III, kv: &StateKV) {
     });
 
     let kv_stop = kv.clone();
-    iii.register_function("rimuru.plugins.stop", move |input: Value| {
+    iii.register_function_with(RegisterFunctionMessage::with_id("rimuru.plugins.stop".to_string()), move |input: Value| {
         let kv = kv_stop.clone();
         async move {
             let plugin_id = require_str(&input, "id")?;
