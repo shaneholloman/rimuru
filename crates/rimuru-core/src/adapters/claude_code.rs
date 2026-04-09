@@ -8,7 +8,10 @@ use uuid::Uuid;
 
 use super::{AdapterCore, AgentAdapter};
 use crate::error::RimuruError;
-use crate::models::{Agent, AgentStatus, AgentType, Session, SessionStatus};
+use crate::models::{
+    Agent, AgentStatus, AgentType, ContextBreakdown, Session, SessionStatus, ToolCallRecord,
+    TurnRecord,
+};
 
 type Result<T> = std::result::Result<T, RimuruError>;
 
@@ -62,6 +65,15 @@ impl ClaudeCodeAdapter {
         }
     }
 
+    pub fn find_session_file(&self, session_id: &str) -> Option<PathBuf> {
+        let files = self.scan_session_files().ok()?;
+        files.into_iter().find(|p| {
+            p.file_stem()
+                .and_then(|s| s.to_str())
+                .is_some_and(|stem| stem == session_id)
+        })
+    }
+
     fn scan_session_files(&self) -> Result<Vec<PathBuf>> {
         let projects = self.projects_dir();
         if !projects.exists() {
@@ -98,9 +110,18 @@ impl ClaudeCodeAdapter {
     }
 
     fn parse_session_jsonl(&self, jsonl_path: &PathBuf) -> Result<Session> {
+        let (session, _breakdown) = self.parse_session_jsonl_full(jsonl_path)?;
+        Ok(session)
+    }
+
+    pub fn parse_session_jsonl_full(
+        &self,
+        jsonl_path: &PathBuf,
+    ) -> Result<(Session, ContextBreakdown)> {
         let content = std::fs::read_to_string(jsonl_path)?;
 
         let mut session = Session::new(self.agent_id, AgentType::ClaudeCode);
+        let mut breakdown = ContextBreakdown::new(session.id);
 
         let project_dir = jsonl_path
             .parent()
@@ -117,6 +138,7 @@ impl ClaudeCodeAdapter {
         let mut session_id_found: Option<String> = None;
         let mut first_timestamp: Option<String> = None;
         let mut last_timestamp: Option<String> = None;
+        let mut turn_index: u32 = 0;
 
         for line in content.lines() {
             let line = line.trim();
@@ -128,11 +150,16 @@ impl ClaudeCodeAdapter {
                 Err(_) => continue,
             };
 
-            if let Some(ts) = entry.get("timestamp").and_then(|v| v.as_str()) {
+            let timestamp = entry
+                .get("timestamp")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            if let Some(ref ts) = timestamp {
                 if first_timestamp.is_none() {
-                    first_timestamp = Some(ts.to_string());
+                    first_timestamp = Some(ts.clone());
                 }
-                last_timestamp = Some(ts.to_string());
+                last_timestamp = Some(ts.clone());
             }
 
             if session_id_found.is_none()
@@ -142,33 +169,163 @@ impl ClaudeCodeAdapter {
             }
 
             if let Some(msg) = entry.get("message") {
-                if msg.get("role").and_then(|r| r.as_str()) == Some("assistant") {
+                let role = msg
+                    .get("role")
+                    .and_then(|r| r.as_str())
+                    .unwrap_or("unknown");
+                let model = msg.get("model").and_then(|m| m.as_str()).map(String::from);
+
+                if role == "assistant" {
                     msg_count += 1;
                 }
-
-                if let Some(model) = msg.get("model").and_then(|m| m.as_str()) {
-                    last_model = Some(model.to_string());
+                if let Some(ref m) = model {
+                    last_model = Some(m.clone());
                 }
 
+                let mut turn_input: u64 = 0;
+                let mut turn_output: u64 = 0;
+                let mut turn_cache_read: u64 = 0;
+                let mut turn_cache_write: u64 = 0;
+
                 if let Some(usage) = msg.get("usage") {
-                    if let Some(inp) = usage.get("input_tokens").and_then(|v| v.as_u64()) {
-                        total_input += inp;
-                    }
-                    if let Some(out) = usage.get("output_tokens").and_then(|v| v.as_u64()) {
-                        total_output += out;
-                    }
-                    if let Some(cr) = usage
+                    turn_input = usage
+                        .get("input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    turn_output = usage
+                        .get("output_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+                    turn_cache_read = usage
                         .get("cache_read_input_tokens")
                         .and_then(|v| v.as_u64())
-                    {
-                        total_cache_read += cr;
-                    }
-                    if let Some(cw) = usage
+                        .unwrap_or(0);
+                    turn_cache_write = usage
                         .get("cache_creation_input_tokens")
                         .and_then(|v| v.as_u64())
-                    {
-                        total_cache_write += cw;
+                        .unwrap_or(0);
+
+                    total_input += turn_input;
+                    total_output += turn_output;
+                    total_cache_read += turn_cache_read;
+                    total_cache_write += turn_cache_write;
+                }
+
+                let mut tool_calls = Vec::new();
+                let mut content_type = "text".to_string();
+
+                if let Some(content_arr) = msg.get("content").and_then(|c| c.as_array()) {
+                    for block in content_arr {
+                        let block_type =
+                            block.get("type").and_then(|t| t.as_str()).unwrap_or("text");
+
+                        match block_type {
+                            "tool_use" => {
+                                content_type = "tool_use".to_string();
+                                let tool_name = block
+                                    .get("name")
+                                    .and_then(|n| n.as_str())
+                                    .unwrap_or("unknown")
+                                    .to_string();
+                                let tool_id =
+                                    block.get("id").and_then(|i| i.as_str()).map(String::from);
+                                let input_est = block
+                                    .get("input")
+                                    .map(|v| v.to_string().len() as u64 / 4)
+                                    .unwrap_or(0);
+
+                                Self::classify_tool_tokens(
+                                    &tool_name,
+                                    input_est,
+                                    0,
+                                    &mut breakdown,
+                                );
+
+                                tool_calls.push(ToolCallRecord {
+                                    tool_name,
+                                    tool_id,
+                                    input_tokens_estimate: input_est,
+                                    output_tokens_estimate: 0,
+                                });
+                            }
+                            "tool_result" => {
+                                content_type = "tool_result".to_string();
+                                let output_est = block
+                                    .get("content")
+                                    .map(|v| v.to_string().len() as u64 / 4)
+                                    .unwrap_or(0);
+
+                                let tool_use_id = block
+                                    .get("tool_use_id")
+                                    .or_else(|| block.get("id"))
+                                    .and_then(|v| v.as_str());
+
+                                let matched = tool_use_id.and_then(|tid| {
+                                    tool_calls
+                                        .iter_mut()
+                                        .find(|tc| tc.tool_id.as_deref() == Some(tid))
+                                });
+
+                                if let Some(tc) = matched {
+                                    tc.output_tokens_estimate = output_est;
+                                    Self::classify_tool_tokens(
+                                        &tc.tool_name,
+                                        0,
+                                        output_est,
+                                        &mut breakdown,
+                                    );
+                                } else if let Some(last_tool) = tool_calls.last_mut() {
+                                    last_tool.output_tokens_estimate = output_est;
+                                    Self::classify_tool_tokens(
+                                        &last_tool.tool_name,
+                                        0,
+                                        output_est,
+                                        &mut breakdown,
+                                    );
+                                } else {
+                                    breakdown.tool_result_tokens += output_est;
+                                }
+                            }
+                            "text" => {
+                                let text_est = block
+                                    .get("text")
+                                    .and_then(|v| v.as_str())
+                                    .map(|s| s.len() as u64 / 4)
+                                    .unwrap_or(0);
+
+                                match role {
+                                    "user" | "human" => breakdown.user_tokens += text_est,
+                                    "assistant" => breakdown.assistant_tokens += text_est,
+                                    "system" => breakdown.system_prompt_tokens += text_est,
+                                    _ => breakdown.conversation_tokens += text_est,
+                                }
+                            }
+                            _ => {}
+                        }
                     }
+                } else {
+                    match role {
+                        "user" | "human" => breakdown.user_tokens += turn_input,
+                        "assistant" => breakdown.assistant_tokens += turn_output,
+                        "system" => breakdown.system_prompt_tokens += turn_input,
+                        _ => {}
+                    }
+                }
+
+                if turn_input > 0 || turn_output > 0 {
+                    breakdown.turns.push(TurnRecord {
+                        turn_index,
+                        role: role.to_string(),
+                        model: model.clone(),
+                        input_tokens: turn_input,
+                        output_tokens: turn_output,
+                        cache_read: turn_cache_read,
+                        cache_write: turn_cache_write,
+                        tool_calls,
+                        timestamp: timestamp.clone(),
+                        content_type,
+                    });
+                    turn_index += 1;
                 }
             }
 
@@ -181,11 +338,13 @@ impl ClaudeCodeAdapter {
         if let Some(ref sid) = session_id_found {
             if let Ok(parsed) = uuid::Uuid::parse_str(sid) {
                 session.id = parsed;
+                breakdown.session_id = parsed;
             }
         } else if let Some(stem) = jsonl_path.file_stem().and_then(|s| s.to_str())
             && let Ok(parsed) = uuid::Uuid::parse_str(stem)
         {
             session.id = parsed;
+            breakdown.session_id = parsed;
         }
 
         if let Some(ref ts) = first_timestamp
@@ -199,6 +358,13 @@ impl ClaudeCodeAdapter {
         session.output_tokens = total_output;
         session.total_tokens = total_input + total_output + total_cache_read + total_cache_write;
         session.model = last_model.clone();
+
+        breakdown.total_tokens = session.total_tokens;
+        breakdown.cache_read_tokens = total_cache_read;
+        breakdown.cache_write_tokens = total_cache_write;
+
+        let turns_json = serde_json::to_value(&breakdown.turns).unwrap_or_default();
+        session.metadata = serde_json::json!({"turns": turns_json});
 
         if let Some(ref model) = last_model {
             session.total_cost = Self::estimate_cost_full(
@@ -228,7 +394,26 @@ impl ClaudeCodeAdapter {
             }
         }
 
-        Ok(session)
+        Ok((session, breakdown))
+    }
+
+    fn classify_tool_tokens(
+        tool_name: &str,
+        input_est: u64,
+        output_est: u64,
+        breakdown: &mut ContextBreakdown,
+    ) {
+        let total = input_est + output_est;
+        match tool_name {
+            "Read" | "read_file" | "ReadFile" => breakdown.file_read_tokens += total,
+            "Bash" | "bash" | "execute_command" => breakdown.bash_output_tokens += total,
+            "Grep" | "grep" | "search" | "Glob" | "glob" => breakdown.file_read_tokens += total,
+            "Edit" | "Write" | "edit_file" | "write_file" => breakdown.file_read_tokens += total,
+            name if name.starts_with("mcp_") || name.contains("::") => {
+                breakdown.mcp_tokens += total
+            }
+            _ => breakdown.tool_result_tokens += total,
+        }
     }
 
     fn estimate_cost(model: &str, input_tokens: u64, output_tokens: u64) -> f64 {

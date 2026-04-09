@@ -142,6 +142,26 @@ const ROUTES: &[Route] = &[
         function_id: "rimuru.health.check",
     },
     Route {
+        method: "GET",
+        path: "api/context/breakdown/:session_id",
+        function_id: "rimuru.context.breakdown",
+    },
+    Route {
+        method: "GET",
+        path: "api/context/breakdowns",
+        function_id: "rimuru.context.breakdown_by_session",
+    },
+    Route {
+        method: "GET",
+        path: "api/context/utilization",
+        function_id: "rimuru.context.utilization",
+    },
+    Route {
+        method: "GET",
+        path: "api/context/waste",
+        function_id: "rimuru.context.waste",
+    },
+    Route {
         method: "POST",
         path: "api/hooks/register",
         function_id: "rimuru.hooks.register",
