@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, oneshot};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use super::types::*;
 use crate::error::RimuruError;
@@ -97,6 +97,29 @@ impl McpClient {
         Ok(client)
     }
 
+    async fn send_notification(&self, method: &str, params: Option<Value>) {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params.unwrap_or(json!({}))
+        });
+
+        let msg = match serde_json::to_string(&request) {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("Failed to serialize notification {}: {}", method, e);
+                return;
+            }
+        };
+
+        let mut stdin = self.stdin.lock().await;
+        if let Err(e) = stdin.write_all(format!("{}\n", msg).as_bytes()).await {
+            warn!("Failed to send notification {}: {}", method, e);
+            return;
+        }
+        let _ = stdin.flush().await;
+    }
+
     async fn send_request(&self, method: &str, params: Option<Value>) -> Result<Value> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
 
@@ -161,9 +184,8 @@ impl McpClient {
 
         self.server_info = Some(init_result);
 
-        self.send_request("notifications/initialized", Some(json!({})))
-            .await
-            .ok();
+        self.send_notification("notifications/initialized", Some(json!({})))
+            .await;
 
         Ok(())
     }

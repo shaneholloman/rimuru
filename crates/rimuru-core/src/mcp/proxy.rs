@@ -48,8 +48,10 @@ impl McpProxy {
         let tool_count = tools.len();
 
         let mut index = self.tool_index.write().await;
+        index.retain(|_, (srv, _)| srv != &server_name);
         for tool in &tools {
-            index.insert(tool.name.clone(), (server_name.clone(), tool.clone()));
+            let key = format!("{}::{}", server_name, tool.name);
+            index.insert(key, (server_name.clone(), tool.clone()));
         }
         drop(index);
 
@@ -165,6 +167,15 @@ impl McpProxy {
         scored.into_iter().take(limit).map(|(_, t)| t).collect()
     }
 
+    pub async fn disconnect_server(&mut self, name: &str) {
+        self.clients.write().await.remove(name);
+        self.tool_index
+            .write()
+            .await
+            .retain(|_, (srv, _)| srv != name);
+        info!("Disconnected MCP server '{}'", name);
+    }
+
     pub async fn call_tool(
         &self,
         tool_name: &str,
@@ -177,6 +188,12 @@ impl McpProxy {
             let index = self.tool_index.read().await;
             index
                 .get(tool_name)
+                .or_else(|| {
+                    index
+                        .iter()
+                        .find(|(_, (_, t))| t.name == tool_name)
+                        .map(|(_, v)| v)
+                })
                 .cloned()
                 .ok_or_else(|| RimuruError::Bridge(format!("Tool not found: {}", tool_name)))?
         };

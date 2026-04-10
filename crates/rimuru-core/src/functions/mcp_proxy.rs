@@ -45,11 +45,21 @@ fn register_connect(iii: &III, kv: &StateKV, proxy: Arc<RwLock<McpProxy>>) {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(true);
 
+                let env: std::collections::HashMap<String, String> = input
+                    .get("env")
+                    .and_then(|v| v.as_object())
+                    .map(|obj| {
+                        obj.iter()
+                            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
                 let config = ProxyServerConfig {
                     name: name.clone(),
                     command,
                     args,
-                    env: Default::default(),
+                    env,
                     progressive_disclosure: progressive,
                     tool_threshold: 10,
                 };
@@ -211,10 +221,13 @@ fn register_disconnect(iii: &III, kv: &StateKV, proxy: Arc<RwLock<McpProxy>>) {
         RegisterFunctionMessage::with_id("rimuru.mcp.proxy.disconnect".to_string()),
         move |input: Value| {
             let kv = kv.clone();
-            let _proxy = proxy.clone();
+            let proxy = proxy.clone();
             async move {
                 let input = extract_input(input);
                 let name = require_str(&input, "name")?;
+
+                let mut proxy = proxy.write().await;
+                proxy.disconnect_server(&name).await;
 
                 if let Err(e) = kv.delete("mcp_servers", &name).await {
                     tracing::warn!("Failed to remove server config: {}", e);
