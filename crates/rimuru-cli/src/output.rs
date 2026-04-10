@@ -10,7 +10,11 @@ pub enum OutputFormat {
 }
 
 pub fn unwrap_body(result: Value) -> Value {
-    result.get("body").cloned().unwrap_or(result)
+    if result.get("status_code").is_some() {
+        result.get("body").cloned().unwrap_or(result)
+    } else {
+        result
+    }
 }
 
 fn new_table(headers: &[&str]) -> Table {

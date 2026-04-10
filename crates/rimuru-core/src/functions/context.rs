@@ -69,7 +69,7 @@ fn register_breakdown(iii: &III, kv: &StateKV) {
                 }
 
                 Ok(api_response(
-                    json!({"error": "No breakdown available for this session type"}),
+                    json!({"status_code": 404, "body": {"error": "No breakdown available for this session type"}}),
                 ))
             }
         },

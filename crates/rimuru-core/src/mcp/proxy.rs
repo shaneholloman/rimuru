@@ -344,7 +344,7 @@ impl McpProxy {
         for (_, (server, tool)) in index.iter() {
             let key = format!("{}::{}", server, tool.name);
             if let Ok(Some(metrics)) = kv.get::<ToolMetrics>("mcp_metrics", &key).await {
-                stats.push((tool.name.clone(), metrics));
+                stats.push((key, metrics));
             }
         }
 
