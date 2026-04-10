@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tokio::sync::RwLock;
 
 use super::sysutil::{api_response, extract_input, kv_err, require_str};
-use crate::mcp::proxy::McpProxy;
+use crate::mcp::proxy::{KV_SCOPE_SERVERS, McpProxy};
 use crate::mcp::types::ProxyServerConfig;
 use crate::state::StateKV;
 
@@ -67,7 +67,7 @@ fn register_connect(iii: &III, kv: &StateKV, proxy: Arc<RwLock<McpProxy>>) {
                 let proxy = proxy.read().await;
                 let result = proxy.connect_server(&config).await.map_err(kv_err)?;
 
-                if let Err(e) = kv.set("mcp_servers", &name, &config).await {
+                if let Err(e) = kv.set(KV_SCOPE_SERVERS, &name, &config).await {
                     tracing::warn!("Failed to persist server config: {}", e);
                 }
 
@@ -229,7 +229,7 @@ fn register_disconnect(iii: &III, kv: &StateKV, proxy: Arc<RwLock<McpProxy>>) {
                 let mut proxy = proxy.write().await;
                 proxy.disconnect_server(&name).await;
 
-                if let Err(e) = kv.delete("mcp_servers", &name).await {
+                if let Err(e) = kv.delete(KV_SCOPE_SERVERS, &name).await {
                     tracing::warn!("Failed to remove server config: {}", e);
                 }
 

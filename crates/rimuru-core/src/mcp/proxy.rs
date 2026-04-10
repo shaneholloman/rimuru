@@ -13,6 +13,9 @@ use crate::state::StateKV;
 
 type Result<T> = std::result::Result<T, RimuruError>;
 
+pub const KV_SCOPE_METRICS: &str = "mcp_metrics";
+pub const KV_SCOPE_SERVERS: &str = "mcp_servers";
+
 pub struct McpProxy {
     clients: Arc<RwLock<HashMap<String, McpClient>>>,
     tool_index: Arc<RwLock<HashMap<String, (String, McpTool)>>>,
@@ -95,21 +98,7 @@ impl McpProxy {
 
         tools
             .iter()
-            .map(|(name, (srv, tool))| ToolListEntry {
-                name: name.to_string(),
-                server: srv.clone(),
-                description: tool.description.clone(),
-                input_schema: if use_progressive {
-                    None
-                } else {
-                    tool.input_schema.clone()
-                },
-                schema_tokens: tool
-                    .input_schema
-                    .as_ref()
-                    .map(McpClient::estimate_tokens)
-                    .unwrap_or(0),
-            })
+            .map(|(name, (srv, tool))| ToolListEntry::from_index(name, srv, tool, !use_progressive))
             .collect()
     }
 
@@ -143,20 +132,7 @@ impl McpProxy {
                 }
 
                 if score > 0 {
-                    Some((
-                        score,
-                        ToolListEntry {
-                            name: name.to_string(),
-                            server: srv.clone(),
-                            description: tool.description.clone(),
-                            input_schema: tool.input_schema.clone(),
-                            schema_tokens: tool
-                                .input_schema
-                                .as_ref()
-                                .map(McpClient::estimate_tokens)
-                                .unwrap_or(0),
-                        },
-                    ))
+                    Some((score, ToolListEntry::from_index(name, srv, tool, true)))
                 } else {
                     None
                 }
@@ -314,7 +290,7 @@ impl McpProxy {
     ) {
         let key = format!("{}::{}", server_name, tool_name);
         let mut metrics: ToolMetrics = kv
-            .get("mcp_metrics", &key)
+            .get(KV_SCOPE_METRICS, &key)
             .await
             .ok()
             .flatten()
@@ -332,18 +308,23 @@ impl McpProxy {
         metrics.avg_latency_ms = ((metrics.avg_latency_ms * (n - 1.0)) + latency_ms) / n;
         metrics.last_called = Some(Utc::now().to_rfc3339());
 
-        if let Err(e) = kv.set("mcp_metrics", &key, &metrics).await {
+        if let Err(e) = kv.set(KV_SCOPE_METRICS, &key, &metrics).await {
             warn!("Failed to record MCP metrics for {}: {}", key, e);
         }
     }
 
     pub async fn get_stats(&self, kv: &StateKV) -> Vec<(String, ToolMetrics)> {
-        let index = self.tool_index.read().await;
-        let mut stats = Vec::new();
+        let keys = match kv.list_keys(KV_SCOPE_METRICS).await {
+            Ok(k) => k,
+            Err(e) => {
+                warn!("Failed to list MCP metric keys: {}", e);
+                return Vec::new();
+            }
+        };
 
-        for (_, (server, tool)) in index.iter() {
-            let key = format!("{}::{}", server, tool.name);
-            if let Ok(Some(metrics)) = kv.get::<ToolMetrics>("mcp_metrics", &key).await {
+        let mut stats = Vec::with_capacity(keys.len());
+        for key in keys {
+            if let Ok(Some(metrics)) = kv.get::<ToolMetrics>(KV_SCOPE_METRICS, &key).await {
                 stats.push((key, metrics));
             }
         }
@@ -369,6 +350,26 @@ pub struct ToolListEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<Value>,
     pub schema_tokens: u64,
+}
+
+impl ToolListEntry {
+    fn from_index(name: &str, server: &str, tool: &McpTool, include_schema: bool) -> Self {
+        Self {
+            name: name.to_string(),
+            server: server.to_string(),
+            description: tool.description.clone(),
+            input_schema: if include_schema {
+                tool.input_schema.clone()
+            } else {
+                None
+            },
+            schema_tokens: tool
+                .input_schema
+                .as_ref()
+                .map(McpClient::estimate_tokens)
+                .unwrap_or(0),
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
