@@ -184,7 +184,7 @@ impl McpProxy {
     ) -> Result<ToolCallResult> {
         let start = std::time::Instant::now();
 
-        let (server_name, _tool) = {
+        let (server_name, tool) = {
             let index = self.tool_index.read().await;
             index
                 .get(tool_name)
@@ -198,9 +198,11 @@ impl McpProxy {
                 .ok_or_else(|| RimuruError::Bridge(format!("Tool not found: {}", tool_name)))?
         };
 
+        let resolved_name = &tool.name;
         let cache_key = format!(
-            "{}::{}",
-            tool_name,
+            "{}::{}::{}",
+            server_name,
+            resolved_name,
             sha256_short(&serde_json::to_string(&arguments).unwrap_or_default())
         );
         {
@@ -211,7 +213,7 @@ impl McpProxy {
                 let output_tokens = McpClient::estimate_tokens(cached_result);
                 self.record_metrics(
                     kv,
-                    tool_name,
+                    resolved_name,
                     &server_name,
                     0,
                     output_tokens,
@@ -237,7 +239,7 @@ impl McpProxy {
             .get(&server_name)
             .ok_or_else(|| RimuruError::Bridge(format!("Server not connected: {}", server_name)))?;
 
-        let mcp_result = client.tools_call(tool_name, arguments).await?;
+        let mcp_result = client.tools_call(resolved_name, arguments).await?;
         let result_value = serde_json::to_value(&mcp_result).unwrap_or(json!(null));
         let output_tokens = McpClient::estimate_tokens(&result_value);
         let latency_ms = start.elapsed().as_millis() as f64;
@@ -258,7 +260,7 @@ impl McpProxy {
 
         self.record_metrics(
             kv,
-            tool_name,
+            resolved_name,
             &server_name,
             input_tokens,
             output_tokens,
