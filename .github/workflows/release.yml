@@ -198,7 +198,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: crates/rimuru-desktop
-        run: npx @tauri-apps/cli build --bundle appimage
+        run: npx @tauri-apps/cli build --bundles appimage
 
       - name: Upload AppImage
         uses: softprops/action-gh-release@v2
@@ -227,7 +227,7 @@ jobs:
 
       - name: Build Tauri app
         working-directory: crates/rimuru-desktop
-        run: npx @tauri-apps/cli build --bundle dmg
+        run: npx @tauri-apps/cli build --bundles dmg
 
       - name: Upload DMG
         uses: softprops/action-gh-release@v2
@@ -255,11 +255,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Docker Hub
+        if: ${{ env.DOCKERHUB_USERNAME != '' }}
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-        continue-on-error: true
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
       - name: Extract metadata
         id: meta
