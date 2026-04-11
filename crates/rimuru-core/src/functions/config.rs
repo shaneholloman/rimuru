@@ -26,7 +26,10 @@ fn default_config() -> Value {
         "theme": "dark",
         "currency": "USD",
         "budget_monthly": 0.0,
+        "budget_daily": 0.0,
+        "budget_session": 0.0,
         "budget_alert_threshold": 0.8,
+        "budget_action": "alert",
         "auto_detect_agents": true,
         "auto_sync_models": true,
         "model_sync_interval_hours": 24

@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod budget;
 pub mod config;
 pub mod context;
 pub mod costs;
@@ -26,6 +27,7 @@ pub fn register_all(iii: &III, kv: &StateKV) {
     let proxy = Arc::new(RwLock::new(McpProxy::new()));
 
     agents::register(iii, kv);
+    budget::register(iii, kv);
     context::register(iii, kv);
     sessions::register(iii, kv);
     costs::register(iii, kv);
