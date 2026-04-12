@@ -167,12 +167,7 @@ pub async fn status(iii: &III, format: &OutputFormat) -> Result<()> {
                 let short_id = if id.len() > 8 { &id[..8] } else { id };
                 table.add_row(vec![
                     Cell::new(short_id),
-                    Cell::new(
-                        guard
-                            .get("command")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(""),
-                    ),
+                    Cell::new(guard.get("command").and_then(|v| v.as_str()).unwrap_or("")),
                     Cell::new(format!(
                         "${:.2}",
                         guard.get("limit").and_then(|v| v.as_f64()).unwrap_or(0.0)
@@ -253,12 +248,7 @@ pub async fn history(iii: &III, format: &OutputFormat) -> Result<()> {
                 let short_id = if id.len() > 8 { &id[..8] } else { id };
                 table.add_row(vec![
                     Cell::new(short_id),
-                    Cell::new(
-                        record
-                            .get("command")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or(""),
-                    ),
+                    Cell::new(record.get("command").and_then(|v| v.as_str()).unwrap_or("")),
                     Cell::new(format!(
                         "${:.2}",
                         record.get("limit").and_then(|v| v.as_f64()).unwrap_or(0.0)

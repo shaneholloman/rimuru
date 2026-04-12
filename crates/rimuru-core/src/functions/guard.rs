@@ -43,10 +43,7 @@ fn register_register(iii: &III, kv: &StateKV) {
                 let input = extract_input(input);
                 let id = require_str(&input, "id")?;
                 let command = require_str(&input, "command")?;
-                let limit = input
-                    .get("limit")
-                    .and_then(|v| v.as_f64())
-                    .unwrap_or(0.0);
+                let limit = input.get("limit").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let action = input
                     .get("action")
                     .and_then(|v| v.as_str())
@@ -94,8 +91,7 @@ fn register_complete(iii: &III, kv: &StateKV) {
                     .to_string();
                 let ended_at = require_str(&input, "ended_at")?;
 
-                let guard: Option<GuardRecord> =
-                    kv.get("guards", &id).await.map_err(kv_err)?;
+                let guard: Option<GuardRecord> = kv.get("guards", &id).await.map_err(kv_err)?;
 
                 let guard = guard.ok_or_else(|| {
                     iii_sdk::IIIError::Handler(format!("guard not found: {}", id))
