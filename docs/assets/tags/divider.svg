@@ -1,4 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="8" viewBox="0 0 820 8">
-  <line x1="0" y1="4" x2="820" y2="4" stroke="#2A2A2A" stroke-width="1"/>
-  <circle cx="410" cy="4" r="3" fill="#6366F1"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="16" viewBox="0 0 820 16">
+  <defs>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#06B6D4" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#06B6D4" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#06B6D4" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <line x1="0" y1="8" x2="820" y2="8" stroke="url(#line)" stroke-width="1"/>
+  <circle cx="390" cy="8" r="1" fill="#06B6D4" opacity="0.5"/>
+  <circle cx="398" cy="8" r="1.5" fill="#06B6D4" opacity="0.7"/>
+  <circle cx="410" cy="8" r="5" fill="#0A0E1A" stroke="#06B6D4" stroke-width="1.2"/>
+  <circle cx="410" cy="8" r="2.5" fill="#22D3EE"/>
+  <circle cx="422" cy="8" r="1.5" fill="#06B6D4" opacity="0.7"/>
+  <circle cx="430" cy="8" r="1" fill="#06B6D4" opacity="0.5"/>
 </svg>
