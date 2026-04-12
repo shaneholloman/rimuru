@@ -40,17 +40,11 @@ fn analyze_turns(session_id: Uuid, turns: &[TurnRecord]) -> RunawayAnalysis {
     detect_token_explosion(turns, &mut patterns);
     detect_oscillation(turns, &mut patterns);
 
-    let severity = patterns
-        .iter()
-        .map(|p| p.severity)
-        .fold(0.0_f64, f64::max);
+    let severity = patterns.iter().map(|p| p.severity).fold(0.0_f64, f64::max);
     let is_runaway = severity >= 0.5;
 
     let tokens_burned: u64 = if is_runaway {
-        turns
-            .iter()
-            .map(|t| t.input_tokens + t.output_tokens)
-            .sum()
+        turns.iter().map(|t| t.input_tokens + t.output_tokens).sum()
     } else {
         0
     };
@@ -89,8 +83,16 @@ fn detect_repeated_calls(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern
     let mut streak_tool = String::new();
 
     for window in turns.windows(2) {
-        let prev_tools: Vec<&str> = window[0].tool_calls.iter().map(|t| t.tool_name.as_str()).collect();
-        let curr_tools: Vec<&str> = window[1].tool_calls.iter().map(|t| t.tool_name.as_str()).collect();
+        let prev_tools: Vec<&str> = window[0]
+            .tool_calls
+            .iter()
+            .map(|t| t.tool_name.as_str())
+            .collect();
+        let curr_tools: Vec<&str> = window[1]
+            .tool_calls
+            .iter()
+            .map(|t| t.tool_name.as_str())
+            .collect();
 
         if !prev_tools.is_empty() && prev_tools == curr_tools {
             streak += 1;
@@ -161,8 +163,7 @@ fn detect_token_explosion(turns: &[TurnRecord], patterns: &mut Vec<RunawayPatter
         .all(|t| t.input_tokens as f64 > avg_input * 2.0);
 
     if all_exploded {
-        let last_3_avg: f64 =
-            last_3.iter().map(|t| t.input_tokens as f64).sum::<f64>() / 3.0;
+        let last_3_avg: f64 = last_3.iter().map(|t| t.input_tokens as f64).sum::<f64>() / 3.0;
         let ratio = last_3_avg / avg_input;
         let severity = ((ratio - 1.0) / 4.0).min(1.0);
 
@@ -202,9 +203,9 @@ fn detect_oscillation(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern>) 
         }
 
         let mut count = 2u32;
-        for j in (i + 2)..tool_sequence.len() {
-            let expected = if (j - i) % 2 == 0 { a } else { b };
-            if &tool_sequence[j] == expected {
+        for (offset, tool) in tool_sequence.iter().enumerate().skip(i + 2) {
+            let expected = if (offset - i) % 2 == 0 { a } else { b };
+            if tool == expected {
                 count += 1;
             } else {
                 break;
@@ -220,10 +221,7 @@ fn detect_oscillation(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern>) 
         let severity = (max_oscillation as f64 / 8.0).min(1.0);
         patterns.push(RunawayPattern {
             pattern_type: "oscillation".to_string(),
-            description: format!(
-                "Tools oscillating back and forth {} times",
-                max_oscillation
-            ),
+            description: format!("Tools oscillating back and forth {} times", max_oscillation),
             severity,
             metadata: json!({"count": max_oscillation}),
         });
@@ -239,14 +237,11 @@ fn register_analyze(iii: &III, kv: &StateKV) {
             async move {
                 let input = extract_input(input);
                 let session_id_str = require_str(&input, "session_id")?;
-                let window = input
-                    .get("window")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(10) as usize;
+                let window = input.get("window").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
-                let session_id = session_id_str
-                    .parse::<Uuid>()
-                    .map_err(|e| iii_sdk::IIIError::Handler(format!("invalid session_id: {}", e)))?;
+                let session_id = session_id_str.parse::<Uuid>().map_err(|e| {
+                    iii_sdk::IIIError::Handler(format!("invalid session_id: {}", e))
+                })?;
 
                 let breakdown: Option<ContextBreakdown> = kv
                     .get("context_breakdowns", &session_id_str)
@@ -291,10 +286,7 @@ fn register_scan(iii: &III, kv: &StateKV) {
             let kv = kv.clone();
             async move {
                 let input = extract_input(input);
-                let window = input
-                    .get("window")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(10) as usize;
+                let window = input.get("window").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
 
                 let sessions: Vec<Session> = kv.list("sessions").await.map_err(kv_err)?;
                 let active: Vec<&Session> = sessions
@@ -306,10 +298,8 @@ fn register_scan(iii: &III, kv: &StateKV) {
 
                 for session in &active {
                     let sid = session.id.to_string();
-                    let breakdown: Option<ContextBreakdown> = kv
-                        .get("context_breakdowns", &sid)
-                        .await
-                        .unwrap_or(None);
+                    let breakdown: Option<ContextBreakdown> =
+                        kv.get("context_breakdowns", &sid).await.unwrap_or(None);
 
                     if let Some(b) = breakdown {
                         let turns = if b.turns.len() > window {
@@ -383,12 +373,8 @@ fn register_configure(iii: &III, kv: &StateKV) {
 
                     let mut config = serde_json::Map::new();
                     for (key, default_val) in defaults.as_object().unwrap() {
-                        let stored: Option<Value> =
-                            kv.get("config", key).await.map_err(kv_err)?;
-                        config.insert(
-                            key.clone(),
-                            stored.unwrap_or_else(|| default_val.clone()),
-                        );
+                        let stored: Option<Value> = kv.get("config", key).await.map_err(kv_err)?;
+                        config.insert(key.clone(), stored.unwrap_or_else(|| default_val.clone()));
                     }
 
                     Ok(api_response(json!({"config": config})))
