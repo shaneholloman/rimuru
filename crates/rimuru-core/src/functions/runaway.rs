@@ -32,12 +32,55 @@ pub fn register(iii: &III, kv: &StateKV) {
     register_configure(iii, kv);
 }
 
-fn analyze_turns(session_id: Uuid, turns: &[TurnRecord]) -> RunawayAnalysis {
+struct RunawayConfig {
+    repeat_threshold: u32,
+    token_explosion_ratio: f64,
+}
+
+impl Default for RunawayConfig {
+    fn default() -> Self {
+        Self {
+            repeat_threshold: 3,
+            token_explosion_ratio: 2.0,
+        }
+    }
+}
+
+async fn load_runaway_config(kv: &StateKV) -> RunawayConfig {
+    let mut cfg = RunawayConfig::default();
+
+    if let Ok(Some(v)) = kv.get::<Value>("config", "runaway_repeat_threshold").await
+        && let Some(n) = v.as_u64()
+    {
+        cfg.repeat_threshold = n as u32;
+    }
+
+    if let Ok(Some(v)) = kv
+        .get::<Value>("config", "runaway_token_explosion_ratio")
+        .await
+        && let Some(n) = v.as_f64()
+    {
+        cfg.token_explosion_ratio = n;
+    }
+
+    cfg
+}
+
+async fn load_runaway_window(kv: &StateKV) -> usize {
+    if let Ok(Some(v)) = kv.get::<Value>("config", "runaway_window").await
+        && let Some(n) = v.as_u64()
+    {
+        return n as usize;
+    }
+    10
+}
+
+fn analyze_turns(session_id: Uuid, turns: &[TurnRecord], cfg: &RunawayConfig) -> RunawayAnalysis {
     let mut patterns: Vec<RunawayPattern> = Vec::new();
 
-    detect_repeated_calls(turns, &mut patterns);
-    detect_repeated_errors(turns, &mut patterns);
-    detect_token_explosion(turns, &mut patterns);
+    detect_repeated_calls(turns, cfg.repeat_threshold, &mut patterns);
+    detect_repeated_errors(turns, cfg.repeat_threshold, &mut patterns);
+    detect_token_explosion(turns, cfg.token_explosion_ratio, &mut patterns);
     detect_oscillation(turns, &mut patterns);
 
     let severity = patterns.iter().map(|p| p.severity).fold(0.0_f64, f64::max);
@@ -73,7 +116,7 @@ fn analyze_turns(session_id: Uuid, turns: &[TurnRecord]) -> RunawayAnalysis {
     }
 }
 
-fn detect_repeated_calls(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern>) {
+fn detect_repeated_calls(turns: &[TurnRecord], threshold: u32, patterns: &mut Vec<RunawayPattern>) {
     if turns.len() < 3 {
         return;
     }
@@ -105,7 +148,7 @@ fn detect_repeated_calls(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern
         }
     }
 
-    if max_streak > 3 {
+    if max_streak > threshold {
         let severity = (max_streak as f64 / 10.0).min(1.0);
         patterns.push(RunawayPattern {
             pattern_type: "repeated_calls".to_string(),
@@ -119,62 +162,93 @@ fn detect_repeated_calls(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern
     }
 }
 
-fn detect_repeated_errors(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern>) {
+fn detect_repeated_errors(
+    turns: &[TurnRecord],
+    threshold: u32,
+    patterns: &mut Vec<RunawayPattern>,
+) {
     let mut max_streak = 0u32;
     let mut streak = 0u32;
+    let mut last_signature: Option<String> = None;
+    let mut max_signature: Option<String> = None;
 
     for turn in turns {
         if turn.content_type.contains("error") {
-            streak += 1;
+            let signature = format!("{}::{}", turn.content_type, turn.role);
+            if last_signature.as_ref() == Some(&signature) {
+                streak += 1;
+            } else {
+                streak = 1;
+                last_signature = Some(signature.clone());
+            }
             if streak > max_streak {
                 max_streak = streak;
+                max_signature = Some(signature);
             }
         } else {
             streak = 0;
+            last_signature = None;
         }
     }
 
-    if max_streak > 3 {
+    if max_streak > threshold {
         let severity = (max_streak as f64 / 8.0).min(1.0);
         patterns.push(RunawayPattern {
             pattern_type: "repeated_errors".to_string(),
-            description: format!("{} consecutive error turns detected", max_streak),
+            description: format!("{} consecutive identical error turns detected", max_streak),
             severity,
-            metadata: json!({"count": max_streak}),
+            metadata: json!({
+                "count": max_streak,
+                "signature": max_signature
+            }),
         });
     }
 }
 
-fn detect_token_explosion(turns: &[TurnRecord], patterns: &mut Vec<RunawayPattern>) {
+fn detect_token_explosion(
+    turns: &[TurnRecord],
+    explosion_ratio: f64,
+    patterns: &mut Vec<RunawayPattern>,
+) {
     if turns.len() < 4 {
         return;
     }
 
-    let total_input: u64 = turns.iter().map(|t| t.input_tokens).sum();
-    let avg_input = total_input as f64 / turns.len() as f64;
-
-    if avg_input == 0.0 {
+    let baseline_end = turns.len() - 3;
+    let baseline = &turns[..baseline_end];
+    if baseline.is_empty() {
         return;
     }
 
-    let last_3 = &turns[turns.len() - 3..];
+    let baseline_total: u64 = baseline.iter().map(|t| t.input_tokens).sum();
+    let baseline_avg = baseline_total as f64 / baseline.len() as f64;
+
+    if baseline_avg == 0.0 {
+        return;
+    }
+
+    let last_3 = &turns[baseline_end..];
     let all_exploded = last_3
         .iter()
-        .all(|t| t.input_tokens as f64 > avg_input * 2.0);
+        .all(|t| t.input_tokens as f64 > baseline_avg * explosion_ratio);
 
     if all_exploded {
         let last_3_avg: f64 = last_3.iter().map(|t| t.input_tokens as f64).sum::<f64>() / 3.0;
-        let ratio = last_3_avg / avg_input;
+        let ratio = last_3_avg / baseline_avg;
         let severity = ((ratio - 1.0) / 4.0).min(1.0);
 
         patterns.push(RunawayPattern {
             pattern_type: "token_explosion".to_string(),
             description: format!(
-                "Last 3 turns use {:.1}x average input tokens ({:.0} vs {:.0} avg)",
-                ratio, last_3_avg, avg_input
+                "Last 3 turns use {:.1}x baseline input tokens ({:.0} vs {:.0} baseline avg)",
+                ratio, last_3_avg, baseline_avg
             ),
             severity,
-            metadata: json!({"ratio": ratio, "last_3_avg": last_3_avg, "overall_avg": avg_input}),
+            metadata: json!({
+                "ratio": ratio,
+                "last_3_avg": last_3_avg,
+                "baseline_avg": baseline_avg
+            }),
         });
     }
 }
@@ -237,7 +311,15 @@ fn register_analyze(iii: &III, kv: &StateKV) {
             async move {
                 let input = extract_input(input);
                 let session_id_str = require_str(&input, "session_id")?;
-                let window = input.get("window").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+
+                let configured_window = load_runaway_window(&kv).await;
+                let window = input
+                    .get("window")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize)
+                    .unwrap_or(configured_window);
+
+                let cfg = load_runaway_config(&kv).await;
 
                 let session_id = session_id_str.parse::<Uuid>().map_err(|e| {
                     iii_sdk::IIIError::Handler(format!("invalid session_id: {}", e))
@@ -269,7 +351,7 @@ fn register_analyze(iii: &III, kv: &StateKV) {
                     &turns
                 };
 
-                let analysis = analyze_turns(session_id, windowed);
+                let analysis = analyze_turns(session_id, windowed, &cfg);
                 Ok(api_response(
                     serde_json::to_value(analysis).unwrap_or_default(),
                 ))
@@ -286,7 +368,15 @@ fn register_scan(iii: &III, kv: &StateKV) {
             let kv = kv.clone();
             async move {
                 let input = extract_input(input);
-                let window = input.get("window").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+
+                let configured_window = load_runaway_window(&kv).await;
+                let window = input
+                    .get("window")
+                    .and_then(|v| v.as_u64())
+                    .map(|n| n as usize)
+                    .unwrap_or(configured_window);
+
+                let cfg = load_runaway_config(&kv).await;
 
                 let sessions: Vec<Session> = kv.list("sessions").await.map_err(kv_err)?;
                 let active: Vec<&Session> = sessions
@@ -299,7 +389,7 @@ fn register_scan(iii: &III, kv: &StateKV) {
                 for session in &active {
                     let sid = session.id.to_string();
                     let breakdown: Option<ContextBreakdown> =
-                        kv.get("context_breakdowns", &sid).await.unwrap_or(None);
+                        kv.get("context_breakdowns", &sid).await.map_err(kv_err)?;
 
                     if let Some(b) = breakdown {
                         let turns = if b.turns.len() > window {
@@ -308,7 +398,7 @@ fn register_scan(iii: &III, kv: &StateKV) {
                             &b.turns
                         };
 
-                        let analysis = analyze_turns(session.id, turns);
+                        let analysis = analyze_turns(session.id, turns, &cfg);
                         if analysis.is_runaway {
                             flagged.push(analysis);
                         }
