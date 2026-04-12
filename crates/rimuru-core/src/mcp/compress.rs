@@ -1,5 +1,6 @@
 use serde_json::Value;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionStrategy {
     Auto,
     Truncate,
@@ -9,12 +10,24 @@ pub enum CompressionStrategy {
     TreeView,
 }
 
+#[derive(Debug, Clone)]
 pub struct CompressionResult {
     pub compressed: Value,
     pub original_tokens: u64,
     pub compressed_tokens: u64,
     pub strategy_used: String,
     pub savings_percent: f64,
+}
+
+fn safe_truncate_chars(s: &str, max_chars: usize) -> &str {
+    if s.len() <= max_chars {
+        return s;
+    }
+    let mut end = max_chars;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
 }
 
 fn estimate_tokens(value: &Value) -> u64 {
@@ -60,7 +73,7 @@ pub fn compress(
 
     let compressed_tokens = estimate_tokens(&compressed);
 
-    if original_tokens > 0 && compressed_tokens < original_tokens / 10 {
+    if compressed_tokens > max_tokens && !matches!(strategy, CompressionStrategy::Truncate) {
         let fallback = truncate(input, max_tokens);
         let fallback_tokens = estimate_tokens(&fallback);
         let savings = if original_tokens > 0 {
@@ -161,7 +174,7 @@ fn truncate(input: &Value, max_tokens: u64) -> Value {
     }
 
     let total_tokens = estimate_tokens_str(&s);
-    let truncated = &s[..max_chars.min(s.len())];
+    let truncated = safe_truncate_chars(&s, max_chars);
     let kept_tokens = estimate_tokens_str(truncated);
 
     Value::String(format!(
@@ -237,8 +250,8 @@ fn compress_value(value: &Value, depth: usize) -> Value {
             }
         }
         Value::String(s) => {
-            if s.len() > 200 {
-                Value::String(format!("{}...", &s[..100.min(s.len())]))
+            if s.chars().count() > 200 {
+                Value::String(format!("{}...", safe_truncate_chars(s, 100)))
             } else {
                 value.clone()
             }

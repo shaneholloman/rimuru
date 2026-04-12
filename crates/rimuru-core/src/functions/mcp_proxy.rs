@@ -200,6 +200,8 @@ fn register_stats(iii: &III, kv: &StateKV, proxy: Arc<RwLock<McpProxy>>) {
                             "cache_misses": m.cache_misses,
                             "avg_latency_ms": m.avg_latency_ms,
                             "last_called": m.last_called,
+                            "tokens_saved_by_compression": m.tokens_saved_by_compression,
+                            "compression_count": m.compression_count,
                         })
                     })
                     .collect();
