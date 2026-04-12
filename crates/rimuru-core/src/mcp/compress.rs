@@ -27,7 +27,11 @@ fn estimate_tokens_str(s: &str) -> u64 {
     s.len() as u64 / 4
 }
 
-pub fn compress(input: &Value, strategy: CompressionStrategy, max_tokens: u64) -> CompressionResult {
+pub fn compress(
+    input: &Value,
+    strategy: CompressionStrategy,
+    max_tokens: u64,
+) -> CompressionResult {
     let original_tokens = estimate_tokens(input);
 
     if original_tokens <= max_tokens {
@@ -262,8 +266,9 @@ fn errors_only(input: &Value, _max_tokens: u64) -> Value {
             || lower.contains("warn")
         {
             kept[i] = true;
-            for j in i.saturating_sub(3)..i {
-                kept[j] = true;
+            let start = i.saturating_sub(3);
+            for slot in kept.iter_mut().take(i).skip(start) {
+                *slot = true;
             }
         }
     }
@@ -346,10 +351,7 @@ impl TreeNode {
             return;
         }
 
-        let child = self
-            .children
-            .iter_mut()
-            .find(|c| c.name == parts[0]);
+        let child = self.children.iter_mut().find(|c| c.name == parts[0]);
 
         match child {
             Some(existing) => existing.insert(&parts[1..]),
