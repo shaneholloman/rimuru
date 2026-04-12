@@ -137,7 +137,7 @@ pub async fn start(
 
     let ended_at = chrono::Utc::now().to_rfc3339();
 
-    let _ = iii
+    if let Err(e) = iii
         .trigger(TriggerRequest {
             function_id: "rimuru.guard.complete".to_string(),
             payload: json!({
@@ -149,7 +149,14 @@ pub async fn start(
             action: None,
             timeout_ms: None,
         })
-        .await;
+        .await
+    {
+        eprintln!(
+            "[GUARD] Warning: failed to record completion for {}: {}",
+            &guard_id[..8.min(guard_id.len())],
+            e
+        );
+    }
 
     eprintln!();
     eprintln!("Guard summary:");

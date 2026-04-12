@@ -3317,7 +3317,7 @@ dependencies = [
 
 [[package]]
 name = "rimuru-cli"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3333,7 +3333,7 @@ dependencies = [
 
 [[package]]
 name = "rimuru-core"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3353,7 +3353,7 @@ dependencies = [
 
 [[package]]
 name = "rimuru-desktop"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "dirs",
@@ -3373,7 +3373,7 @@ dependencies = [
 
 [[package]]
 name = "rimuru-tui"
-version = "0.2.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "chrono",

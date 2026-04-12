@@ -20,14 +20,10 @@ pub struct CompressionResult {
 }
 
 fn safe_truncate_chars(s: &str, max_chars: usize) -> &str {
-    if s.len() <= max_chars {
-        return s;
+    match s.char_indices().nth(max_chars) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
     }
-    let mut end = max_chars;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    &s[..end]
 }
 
 fn estimate_tokens(value: &Value) -> u64 {
@@ -168,7 +164,7 @@ fn truncate(input: &Value, max_tokens: u64) -> Value {
         _ => serde_json::to_string_pretty(input).unwrap_or_default(),
     };
 
-    let max_chars = (max_tokens * 3) as usize;
+    let max_chars = max_tokens.saturating_mul(3).min(usize::MAX as u64) as usize;
     if s.len() <= max_chars {
         return Value::String(s);
     }
