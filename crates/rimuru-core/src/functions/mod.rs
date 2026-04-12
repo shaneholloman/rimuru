@@ -12,6 +12,7 @@ pub mod mcp_proxy;
 pub mod metrics;
 pub mod models;
 pub mod plugins;
+pub mod runaway;
 pub mod sessions;
 pub mod skillkit;
 pub mod sysutil;
@@ -39,6 +40,7 @@ pub fn register_all(iii: &III, kv: &StateKV) {
     plugins::register(iii, kv);
     mcp::register(iii, kv);
     mcp_proxy::register(iii, kv, proxy);
+    runaway::register(iii, kv);
     skillkit::register(iii, kv);
     health::register(iii, kv);
     config::register(iii, kv);
