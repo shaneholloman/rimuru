@@ -1,11 +1,14 @@
 use chrono::{Datelike, Utc};
-use iii_sdk::{III, RegisterFunctionMessage, TriggerRequest};
+use iii_sdk::{III, IIIError, RegisterFunctionMessage, TriggerRequest};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 use super::sysutil::{api_response, extract_input, kv_err};
 use crate::models::CostRecord;
 use crate::state::StateKV;
+
+const VALID_ACTIONS: &[&str] = &["alert", "block", "warn"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct BudgetAlert {
@@ -24,42 +27,55 @@ pub fn register(iii: &III, kv: &StateKV) {
     register_alerts(iii, kv);
 }
 
-async fn get_config_f64(kv: &StateKV, key: &str, default: f64) -> f64 {
-    kv.get::<Value>("config", key)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|v| v.as_f64())
-        .unwrap_or(default)
+async fn get_config_f64(kv: &StateKV, key: &str, default: f64) -> Result<f64, IIIError> {
+    let value: Option<Value> = kv.get("config", key).await.map_err(kv_err)?;
+    Ok(value.and_then(|v| v.as_f64()).unwrap_or(default))
 }
 
-async fn get_config_str(kv: &StateKV, key: &str, default: &str) -> String {
-    kv.get::<Value>("config", key)
-        .await
-        .ok()
-        .flatten()
+async fn get_config_str(kv: &StateKV, key: &str, default: &str) -> Result<String, IIIError> {
+    let value: Option<Value> = kv.get("config", key).await.map_err(kv_err)?;
+    Ok(value
         .and_then(|v| v.as_str().map(String::from))
-        .unwrap_or_else(|| default.to_string())
+        .unwrap_or_else(|| default.to_string()))
 }
 
-async fn compute_monthly_spent(kv: &StateKV) -> f64 {
+async fn compute_monthly_spent(kv: &StateKV) -> Result<f64, IIIError> {
     let now = Utc::now();
-    let records: Vec<CostRecord> = kv.list("cost_records").await.unwrap_or_default();
-    records
+    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
+    Ok(records
         .iter()
         .filter(|r| r.recorded_at.year() == now.year() && r.recorded_at.month() == now.month())
         .map(|r| r.total_cost)
-        .sum()
+        .sum())
 }
 
-async fn compute_daily_spent(kv: &StateKV) -> f64 {
+async fn compute_daily_spent(kv: &StateKV) -> Result<f64, IIIError> {
     let today = Utc::now().date_naive();
-    let records: Vec<CostRecord> = kv.list("cost_records").await.unwrap_or_default();
-    records
+    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
+    Ok(records
         .iter()
         .filter(|r| r.recorded_at.date_naive() == today)
         .map(|r| r.total_cost)
-        .sum()
+        .sum())
+}
+
+async fn compute_session_spent(kv: &StateKV, session_id: Uuid) -> Result<f64, IIIError> {
+    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
+    Ok(records
+        .iter()
+        .filter(|r| r.session_id == Some(session_id))
+        .map(|r| r.total_cost)
+        .sum())
+}
+
+async fn compute_agent_daily_spent(kv: &StateKV, agent_id: Uuid) -> Result<f64, IIIError> {
+    let today = Utc::now().date_naive();
+    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
+    Ok(records
+        .iter()
+        .filter(|r| r.agent_id == agent_id && r.recorded_at.date_naive() == today)
+        .map(|r| r.total_cost)
+        .sum())
 }
 
 fn register_check(iii: &III, kv: &StateKV) {
@@ -71,75 +87,75 @@ fn register_check(iii: &III, kv: &StateKV) {
             async move {
                 let input = extract_input(input);
 
-                let monthly_limit = get_config_f64(&kv, "budget_monthly", 0.0).await;
-                let daily_limit = get_config_f64(&kv, "budget_daily", 0.0).await;
-                let session_limit = get_config_f64(&kv, "budget_session", 0.0).await;
-                let alert_threshold = get_config_f64(&kv, "budget_alert_threshold", 0.8).await;
-                let action = get_config_str(&kv, "budget_action", "alert").await;
+                let monthly_limit = get_config_f64(&kv, "budget_monthly", 0.0).await?;
+                let daily_limit = get_config_f64(&kv, "budget_daily", 0.0).await?;
+                let session_limit = get_config_f64(&kv, "budget_session", 0.0).await?;
+                let agent_daily_limit = get_config_f64(&kv, "budget_daily_agent", 0.0).await?;
+                let alert_threshold = get_config_f64(&kv, "budget_alert_threshold", 0.8).await?;
+                let action = get_config_str(&kv, "budget_action", "alert").await?;
 
-                let monthly_spent = compute_monthly_spent(&kv).await;
-                let daily_spent = compute_daily_spent(&kv).await;
-                let session_cost = input
-                    .get("session_cost")
+                let pending_cost = input
+                    .get("pending_cost")
                     .and_then(|v| v.as_f64())
                     .unwrap_or(0.0);
+
+                let monthly_spent = compute_monthly_spent(&kv).await? + pending_cost;
+                let daily_spent = compute_daily_spent(&kv).await? + pending_cost;
+
+                let session_spent = if let Some(session_id_str) =
+                    input.get("session_id").and_then(|v| v.as_str())
+                    && let Ok(session_id) = session_id_str.parse::<Uuid>()
+                {
+                    compute_session_spent(&kv, session_id).await? + pending_cost
+                } else {
+                    pending_cost
+                };
+
+                let agent_daily_spent = if let Some(agent_id_str) =
+                    input.get("agent_id").and_then(|v| v.as_str())
+                    && let Ok(agent_id) = agent_id_str.parse::<Uuid>()
+                {
+                    compute_agent_daily_spent(&kv, agent_id).await? + pending_cost
+                } else {
+                    0.0
+                };
 
                 let mut status = "ok".to_string();
                 let mut warnings: Vec<String> = Vec::new();
                 let mut exceeded = false;
                 let mut warning = false;
 
-                if monthly_limit > 0.0 {
-                    if monthly_spent >= monthly_limit {
+                let checks = [
+                    ("Monthly", monthly_limit, monthly_spent),
+                    ("Daily", daily_limit, daily_spent),
+                    ("Session", session_limit, session_spent),
+                    ("Agent daily", agent_daily_limit, agent_daily_spent),
+                ];
+
+                for (label, limit, spent) in checks {
+                    if limit <= 0.0 {
+                        continue;
+                    }
+                    if spent >= limit {
                         status = "exceeded".to_string();
                         exceeded = true;
                         warnings.push(format!(
-                            "Monthly budget exceeded: ${:.2} / ${:.2}",
-                            monthly_spent, monthly_limit
+                            "{} budget exceeded: ${:.2} / ${:.2}",
+                            label, spent, limit
                         ));
-                    } else if monthly_spent >= monthly_limit * alert_threshold {
+                    } else if spent >= limit * alert_threshold {
                         if status != "exceeded" {
                             status = "warning".to_string();
                         }
                         warning = true;
                         warnings.push(format!(
-                            "Monthly budget warning: ${:.2} / ${:.2} ({:.0}%)",
-                            monthly_spent,
-                            monthly_limit,
-                            monthly_spent / monthly_limit * 100.0
+                            "{} budget warning: ${:.2} / ${:.2} ({:.0}%)",
+                            label,
+                            spent,
+                            limit,
+                            spent / limit * 100.0
                         ));
                     }
-                }
-
-                if daily_limit > 0.0 {
-                    if daily_spent >= daily_limit {
-                        status = "exceeded".to_string();
-                        exceeded = true;
-                        warnings.push(format!(
-                            "Daily budget exceeded: ${:.2} / ${:.2}",
-                            daily_spent, daily_limit
-                        ));
-                    } else if daily_spent >= daily_limit * alert_threshold {
-                        if status != "exceeded" {
-                            status = "warning".to_string();
-                        }
-                        warning = true;
-                        warnings.push(format!(
-                            "Daily budget warning: ${:.2} / ${:.2} ({:.0}%)",
-                            daily_spent,
-                            daily_limit,
-                            daily_spent / daily_limit * 100.0
-                        ));
-                    }
-                }
-
-                if session_limit > 0.0 && session_cost >= session_limit {
-                    status = "exceeded".to_string();
-                    exceeded = true;
-                    warnings.push(format!(
-                        "Session budget exceeded: ${:.2} / ${:.2}",
-                        session_cost, session_limit
-                    ));
                 }
 
                 if warning || exceeded {
@@ -174,6 +190,7 @@ fn register_check(iii: &III, kv: &StateKV) {
                                     "status": status,
                                     "monthly_spent": monthly_spent,
                                     "daily_spent": daily_spent,
+                                    "session_spent": session_spent,
                                     "warnings": warnings
                                 }
                             }),
@@ -190,6 +207,8 @@ fn register_check(iii: &III, kv: &StateKV) {
                     "action": action,
                     "monthly_spent": monthly_spent,
                     "daily_spent": daily_spent,
+                    "session_spent": session_spent,
+                    "agent_daily_spent": agent_daily_spent,
                     "warnings": warnings
                 })))
             }
@@ -204,14 +223,14 @@ fn register_status(iii: &III, kv: &StateKV) {
         move |_input: Value| {
             let kv = kv.clone();
             async move {
-                let monthly_limit = get_config_f64(&kv, "budget_monthly", 0.0).await;
-                let daily_limit = get_config_f64(&kv, "budget_daily", 0.0).await;
-                let session_limit = get_config_f64(&kv, "budget_session", 0.0).await;
-                let alert_threshold = get_config_f64(&kv, "budget_alert_threshold", 0.8).await;
-                let action = get_config_str(&kv, "budget_action", "alert").await;
+                let monthly_limit = get_config_f64(&kv, "budget_monthly", 0.0).await?;
+                let daily_limit = get_config_f64(&kv, "budget_daily", 0.0).await?;
+                let session_limit = get_config_f64(&kv, "budget_session", 0.0).await?;
+                let alert_threshold = get_config_f64(&kv, "budget_alert_threshold", 0.8).await?;
+                let action = get_config_str(&kv, "budget_action", "alert").await?;
 
-                let monthly_spent = compute_monthly_spent(&kv).await;
-                let daily_spent = compute_daily_spent(&kv).await;
+                let monthly_spent = compute_monthly_spent(&kv).await?;
+                let daily_spent = compute_daily_spent(&kv).await?;
 
                 let now = Utc::now();
                 let day_of_month = now.day() as f64;
@@ -265,6 +284,44 @@ fn register_status(iii: &III, kv: &StateKV) {
     );
 }
 
+fn validate_limit(value: &Value, key: &str) -> Result<f64, IIIError> {
+    let n = value
+        .as_f64()
+        .ok_or_else(|| IIIError::Handler(format!("{} must be a number", key)))?;
+    if !n.is_finite() {
+        return Err(IIIError::Handler(format!("{} must be finite", key)));
+    }
+    if n < 0.0 {
+        return Err(IIIError::Handler(format!("{} must be >= 0", key)));
+    }
+    Ok(n)
+}
+
+fn validate_threshold(value: &Value) -> Result<f64, IIIError> {
+    let n = value
+        .as_f64()
+        .ok_or_else(|| IIIError::Handler("alert_threshold must be a number".into()))?;
+    if !(0.0..=1.0).contains(&n) {
+        return Err(IIIError::Handler(
+            "alert_threshold must be between 0.0 and 1.0".into(),
+        ));
+    }
+    Ok(n)
+}
+
+fn validate_action(value: &Value) -> Result<String, IIIError> {
+    let s = value
+        .as_str()
+        .ok_or_else(|| IIIError::Handler("action must be a string".into()))?;
+    if !VALID_ACTIONS.contains(&s) {
+        return Err(IIIError::Handler(format!(
+            "action must be one of: {}",
+            VALID_ACTIONS.join(", ")
+        )));
+    }
+    Ok(s.to_string())
+}
+
 fn register_set(iii: &III, kv: &StateKV) {
     let kv = kv.clone();
     iii.register_function_with(
@@ -275,22 +332,34 @@ fn register_set(iii: &III, kv: &StateKV) {
                 let input = extract_input(input);
                 let mut updated: Vec<String> = Vec::new();
 
-                let mappings = [
+                let limit_keys = [
                     ("monthly_limit", "budget_monthly"),
                     ("daily_limit", "budget_daily"),
                     ("session_limit", "budget_session"),
-                    ("alert_threshold", "budget_alert_threshold"),
+                    ("daily_agent_limit", "budget_daily_agent"),
                 ];
 
-                for (input_key, config_key) in &mappings {
+                for (input_key, config_key) in &limit_keys {
                     if let Some(val) = input.get(*input_key) {
-                        kv.set("config", config_key, val).await.map_err(kv_err)?;
+                        let n = validate_limit(val, input_key)?;
+                        kv.set("config", config_key, &json!(n))
+                            .await
+                            .map_err(kv_err)?;
                         updated.push(config_key.to_string());
                     }
                 }
 
+                if let Some(val) = input.get("alert_threshold") {
+                    let n = validate_threshold(val)?;
+                    kv.set("config", "budget_alert_threshold", &json!(n))
+                        .await
+                        .map_err(kv_err)?;
+                    updated.push("budget_alert_threshold".to_string());
+                }
+
                 if let Some(val) = input.get("action") {
-                    kv.set("config", "budget_action", val)
+                    let s = validate_action(val)?;
+                    kv.set("config", "budget_action", &json!(s))
                         .await
                         .map_err(kv_err)?;
                     updated.push("budget_action".to_string());

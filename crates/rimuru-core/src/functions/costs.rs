@@ -123,6 +123,42 @@ fn register_record(iii: &III, kv: &StateKV) {
                     record.cache_write_tokens = cache_write;
                 }
 
+                let check_result = kv
+                    .iii()
+                    .trigger(TriggerRequest {
+                        function_id: "rimuru.budget.check".to_string(),
+                        payload: json!({
+                            "session_id": record.session_id.map(|id| id.to_string()),
+                            "agent_id": agent_id.to_string(),
+                            "pending_cost": record.total_cost
+                        }),
+                        action: None,
+                        timeout_ms: Some(5000),
+                    })
+                    .await
+                    .map_err(|e| {
+                        iii_sdk::IIIError::Handler(format!("budget check failed: {}", e))
+                    })?;
+
+                let body = check_result.get("body").unwrap_or(&check_result);
+                let exceeded = body
+                    .get("exceeded")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let action = body
+                    .get("action")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("alert");
+                if exceeded && action == "block" {
+                    return Err(iii_sdk::IIIError::Handler(
+                        "Budget exceeded. Cost recording blocked.".into(),
+                    ));
+                }
+                let budget_warning = body
+                    .get("warning")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
                 let record_id = record.id.to_string();
                 kv.set("cost_records", &record_id, &record)
                     .await
@@ -166,42 +202,6 @@ fn register_record(iii: &III, kv: &StateKV) {
                 )
                 .await
                 .map_err(kv_err)?;
-
-                let check_result = kv
-                    .iii()
-                    .trigger(TriggerRequest {
-                        function_id: "rimuru.budget.check".to_string(),
-                        payload: json!({
-                            "session_id": record.session_id.map(|id| id.to_string()),
-                            "session_cost": record.total_cost
-                        }),
-                        action: None,
-                        timeout_ms: Some(5000),
-                    })
-                    .await;
-
-                let budget_warning = match &check_result {
-                    Ok(val) => {
-                        let body = val.get("body").unwrap_or(val);
-                        let exceeded = body
-                            .get("exceeded")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false);
-                        let action = body
-                            .get("action")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("alert");
-                        if exceeded && action == "block" {
-                            return Err(iii_sdk::IIIError::Handler(
-                                "Budget exceeded. Cost recording blocked.".into(),
-                            ));
-                        }
-                        body.get("warning")
-                            .and_then(|v| v.as_bool())
-                            .unwrap_or(false)
-                    }
-                    Err(_) => false,
-                };
 
                 Ok(api_response(json!({
                     "record": record,

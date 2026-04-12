@@ -28,6 +28,7 @@ fn default_config() -> Value {
         "budget_monthly": 0.0,
         "budget_daily": 0.0,
         "budget_session": 0.0,
+        "budget_daily_agent": 0.0,
         "budget_alert_threshold": 0.8,
         "budget_action": "alert",
         "auto_detect_agents": true,
