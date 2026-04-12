@@ -444,10 +444,47 @@ fn register_configure(iii: &III, kv: &StateKV) {
                 if has_updates {
                     let mut updated: Vec<String> = Vec::new();
                     for (input_key, config_key) in &config_keys {
-                        if let Some(val) = input.get(*input_key) {
-                            kv.set("config", config_key, val).await.map_err(kv_err)?;
-                            updated.push(config_key.to_string());
+                        let Some(val) = input.get(*input_key) else {
+                            continue;
+                        };
+                        match *input_key {
+                            "window" | "repeat_threshold" => {
+                                let n = val.as_u64().ok_or_else(|| {
+                                    iii_sdk::IIIError::Handler(format!(
+                                        "{} must be a positive integer",
+                                        input_key
+                                    ))
+                                })?;
+                                if n == 0 {
+                                    return Err(iii_sdk::IIIError::Handler(format!(
+                                        "{} must be > 0",
+                                        input_key
+                                    )));
+                                }
+                            }
+                            "token_explosion_ratio" => {
+                                let n = val.as_f64().ok_or_else(|| {
+                                    iii_sdk::IIIError::Handler(
+                                        "token_explosion_ratio must be a number".into(),
+                                    )
+                                })?;
+                                if !n.is_finite() || n <= 1.0 {
+                                    return Err(iii_sdk::IIIError::Handler(
+                                        "token_explosion_ratio must be > 1.0".into(),
+                                    ));
+                                }
+                            }
+                            "auto_scan_enabled" => {
+                                if !val.is_boolean() {
+                                    return Err(iii_sdk::IIIError::Handler(
+                                        "auto_scan_enabled must be a boolean".into(),
+                                    ));
+                                }
+                            }
+                            _ => {}
                         }
+                        kv.set("config", config_key, val).await.map_err(kv_err)?;
+                        updated.push(config_key.to_string());
                     }
                     Ok(api_response(json!({
                         "updated": updated,

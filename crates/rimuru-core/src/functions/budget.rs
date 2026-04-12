@@ -218,7 +218,7 @@ fn register_check(iii: &III, kv: &StateKV) {
                     } else {
                         "budget.warning"
                     };
-                    let _ = kv
+                    if let Err(e) = kv
                         .iii()
                         .trigger(TriggerRequest {
                             function_id: "rimuru.hooks.dispatch".to_string(),
@@ -235,7 +235,10 @@ fn register_check(iii: &III, kv: &StateKV) {
                             action: None,
                             timeout_ms: Some(5000),
                         })
-                        .await;
+                        .await
+                    {
+                        tracing::warn!("failed to dispatch {} event: {}", event_type, e);
+                    }
                 }
 
                 Ok(api_response(json!({
