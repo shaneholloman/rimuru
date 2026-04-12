@@ -39,24 +39,43 @@ async fn get_config_str(kv: &StateKV, key: &str, default: &str) -> Result<String
         .unwrap_or_else(|| default.to_string()))
 }
 
+async fn read_daily_cents(kv: &StateKV, date_key: &str) -> Result<i64, IIIError> {
+    let value: Option<Value> = kv.get("cost_daily", date_key).await.map_err(kv_err)?;
+    Ok(value
+        .and_then(|v| v.get("total_cost_cents").and_then(|c| c.as_i64()))
+        .unwrap_or(0))
+}
+
+async fn read_agent_daily_cents(
+    kv: &StateKV,
+    agent_id: Uuid,
+    date_key: &str,
+) -> Result<i64, IIIError> {
+    let key = format!("{}::{}", agent_id, date_key);
+    let value: Option<Value> = kv.get("cost_agent", &key).await.map_err(kv_err)?;
+    Ok(value
+        .and_then(|v| v.get("total_cost_cents").and_then(|c| c.as_i64()))
+        .unwrap_or(0))
+}
+
 async fn compute_monthly_spent(kv: &StateKV) -> Result<f64, IIIError> {
     let now = Utc::now();
-    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
-    Ok(records
-        .iter()
-        .filter(|r| r.recorded_at.year() == now.year() && r.recorded_at.month() == now.month())
-        .map(|r| r.total_cost)
-        .sum())
+    let year = now.year();
+    let month = now.month();
+    let last_day = days_in_month(year, month);
+
+    let mut total_cents: i64 = 0;
+    for day in 1..=last_day {
+        let date_key = format!("{:04}-{:02}-{:02}", year, month, day);
+        total_cents += read_daily_cents(kv, &date_key).await?;
+    }
+    Ok(total_cents as f64 / 100.0)
 }
 
 async fn compute_daily_spent(kv: &StateKV) -> Result<f64, IIIError> {
-    let today = Utc::now().date_naive();
-    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
-    Ok(records
-        .iter()
-        .filter(|r| r.recorded_at.date_naive() == today)
-        .map(|r| r.total_cost)
-        .sum())
+    let date_key = Utc::now().format("%Y-%m-%d").to_string();
+    let cents = read_daily_cents(kv, &date_key).await?;
+    Ok(cents as f64 / 100.0)
 }
 
 async fn compute_session_spent(kv: &StateKV, session_id: Uuid) -> Result<f64, IIIError> {
@@ -69,13 +88,21 @@ async fn compute_session_spent(kv: &StateKV, session_id: Uuid) -> Result<f64, II
 }
 
 async fn compute_agent_daily_spent(kv: &StateKV, agent_id: Uuid) -> Result<f64, IIIError> {
-    let today = Utc::now().date_naive();
-    let records: Vec<CostRecord> = kv.list("cost_records").await.map_err(kv_err)?;
-    Ok(records
-        .iter()
-        .filter(|r| r.agent_id == agent_id && r.recorded_at.date_naive() == today)
-        .map(|r| r.total_cost)
-        .sum())
+    let date_key = Utc::now().format("%Y-%m-%d").to_string();
+    let cents = read_agent_daily_cents(kv, agent_id, &date_key).await?;
+    Ok(cents as f64 / 100.0)
+}
+
+fn days_in_month(year: i32, month: u32) -> u32 {
+    let (next_year, next_month) = if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    };
+    chrono::NaiveDate::from_ymd_opt(next_year, next_month, 1)
+        .and_then(|d| d.pred_opt())
+        .map(|d| d.day())
+        .unwrap_or(31)
 }
 
 fn register_check(iii: &III, kv: &StateKV) {
@@ -102,22 +129,22 @@ fn register_check(iii: &III, kv: &StateKV) {
                 let monthly_spent = compute_monthly_spent(&kv).await? + pending_cost;
                 let daily_spent = compute_daily_spent(&kv).await? + pending_cost;
 
-                let session_spent = if let Some(session_id_str) =
+                let session_spent: Option<f64> = if let Some(session_id_str) =
                     input.get("session_id").and_then(|v| v.as_str())
                     && let Ok(session_id) = session_id_str.parse::<Uuid>()
                 {
-                    compute_session_spent(&kv, session_id).await? + pending_cost
+                    Some(compute_session_spent(&kv, session_id).await? + pending_cost)
                 } else {
-                    pending_cost
+                    None
                 };
 
-                let agent_daily_spent = if let Some(agent_id_str) =
+                let agent_daily_spent: Option<f64> = if let Some(agent_id_str) =
                     input.get("agent_id").and_then(|v| v.as_str())
                     && let Ok(agent_id) = agent_id_str.parse::<Uuid>()
                 {
-                    compute_agent_daily_spent(&kv, agent_id).await? + pending_cost
+                    Some(compute_agent_daily_spent(&kv, agent_id).await? + pending_cost)
                 } else {
-                    0.0
+                    None
                 };
 
                 let mut status = "ok".to_string();
@@ -125,17 +152,20 @@ fn register_check(iii: &III, kv: &StateKV) {
                 let mut exceeded = false;
                 let mut warning = false;
 
-                let checks = [
-                    ("Monthly", monthly_limit, monthly_spent),
-                    ("Daily", daily_limit, daily_spent),
+                let checks: [(&str, f64, Option<f64>); 4] = [
+                    ("Monthly", monthly_limit, Some(monthly_spent)),
+                    ("Daily", daily_limit, Some(daily_spent)),
                     ("Session", session_limit, session_spent),
                     ("Agent daily", agent_daily_limit, agent_daily_spent),
                 ];
 
-                for (label, limit, spent) in checks {
+                for (label, limit, spent_opt) in checks {
                     if limit <= 0.0 {
                         continue;
                     }
+                    let Some(spent) = spent_opt else {
+                        continue;
+                    };
                     if spent >= limit {
                         status = "exceeded".to_string();
                         exceeded = true;
@@ -387,11 +417,13 @@ fn register_alerts(iii: &III, kv: &StateKV) {
                 let mut alerts: Vec<BudgetAlert> =
                     kv.list("budget_alerts").await.map_err(kv_err)?;
                 alerts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+                let total = alerts.len();
                 alerts.truncate(limit);
 
                 Ok(api_response(json!({
                     "alerts": alerts,
-                    "total": alerts.len()
+                    "count": alerts.len(),
+                    "total": total
                 })))
             }
         },
