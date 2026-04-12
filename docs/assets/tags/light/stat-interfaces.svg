@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="56" viewBox="0 0 160 56">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F8F9FB"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="159" height="55" rx="8" ry="8" fill="url(#bg)" stroke="#E5E7EB"/>
+  <text x="14" y="30" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="22" font-weight="700" fill="#4F46E5">4</text>
+  <text x="14" y="45" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="500" letter-spacing="0.8" fill="#64748B">INTERFACES</text>
+</svg>
