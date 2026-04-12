@@ -1,8 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="720" height="240" viewBox="0 0 720 240">
   <defs>
-    <radialGradient id="sky" cx="0.5" cy="0.4" r="0.8">
+    <radialGradient id="sky" cx="0.5" cy="0.4" r="0.85">
       <stop offset="0" stop-color="#141B2E"/>
       <stop offset="1" stop-color="#0A0E1A"/>
+    </radialGradient>
+    <radialGradient id="aura" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#22D3EE" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#22D3EE" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#22D3EE"/>
@@ -15,11 +19,11 @@
       <stop offset="1" stop-color="#06B6D4" stop-opacity="0"/>
     </linearGradient>
     <pattern id="stars" patternUnits="userSpaceOnUse" width="60" height="60">
-      <circle cx="8" cy="12" r="0.8" fill="#A5F3FC" opacity="0.4"/>
-      <circle cx="34" cy="28" r="0.5" fill="#22D3EE" opacity="0.5"/>
-      <circle cx="52" cy="8" r="0.6" fill="#A5F3FC" opacity="0.3"/>
-      <circle cx="22" cy="48" r="0.7" fill="#22D3EE" opacity="0.4"/>
-      <circle cx="46" cy="44" r="0.5" fill="#A5F3FC" opacity="0.5"/>
+      <circle cx="8" cy="12" r="0.8" fill="#A5F3FC" opacity="0.35"/>
+      <circle cx="34" cy="28" r="0.5" fill="#22D3EE" opacity="0.45"/>
+      <circle cx="52" cy="8" r="0.6" fill="#A5F3FC" opacity="0.25"/>
+      <circle cx="22" cy="48" r="0.7" fill="#22D3EE" opacity="0.35"/>
+      <circle cx="46" cy="44" r="0.5" fill="#A5F3FC" opacity="0.45"/>
     </pattern>
     <pattern id="grid" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(45)">
       <line x1="0" y1="0" x2="0" y2="12" stroke="#06B6D4" stroke-width="1.2" opacity="0.04"/>
@@ -33,16 +37,28 @@
   <path d="M 695 3 L 717 3 L 717 25" stroke="#06B6D4" stroke-width="1.5" fill="none" stroke-linecap="square"/>
   <path d="M 3 215 L 3 237 L 25 237" stroke="#06B6D4" stroke-width="1.5" fill="none" stroke-linecap="square"/>
   <path d="M 695 237 L 717 237 L 717 215" stroke="#06B6D4" stroke-width="1.5" fill="none" stroke-linecap="square"/>
-  <g transform="translate(360.0 64)">
-    <polygon points="-26,-10.4 -10.4,-26 10.4,-26 26,-10.4 26,10.4 10.4,26 -10.4,26 -26,10.4" fill="none" stroke="#06B6D4" stroke-width="1" stroke-dasharray="2 2" opacity="0.65"/>
-    <polygon points="0,-14.3 14.3,0 0,14.3 -14.3,0" fill="#06B6D4" opacity="0.35"/>
-    <polygon points="0,-10.4 10.4,0 0,10.4 -10.4,0" fill="#22D3EE"/>
-    <circle cx="0" cy="0" r="1.6" fill="#A5F3FC"/>
+  <circle cx="118" cy="120" r="88" fill="url(#aura)"/>
+  <ellipse cx="118" cy="203" rx="72" ry="5" fill="#0A0E1A" opacity="0.55"/>
+  <path d="M 58.599999999999994,147.0 C 47.8,117.3 53.19999999999999,76.8 80.19999999999999,60.599999999999994 C 96.4,47.099999999999994 112.6,41.69999999999999 118,39.0 C 123.4,41.69999999999999 139.6,47.099999999999994 155.8,60.599999999999994 C 182.8,76.8 188.2,117.3 177.4,147.0 C 166.6,168.6 139.6,176.7 118,179.4 C 96.4,176.7 69.4,168.6 58.599999999999994,147.0 Z" fill="#06B6D4" opacity="0.55" stroke="#22D3EE" stroke-width="1.8" stroke-linejoin="round"/>
+  <ellipse cx="88.3" cy="79.5" rx="17.55" ry="8.100000000000001" fill="#A5F3FC" opacity="0.65"/>
+  <ellipse cx="82.9" cy="74.1" rx="6.75" ry="2.7" fill="#F8FAFC" opacity="0.9"/>
+  <ellipse cx="99.1" cy="111.9" rx="6.075" ry="8.100000000000001" fill="#0A0E1A"/>
+  <ellipse cx="136.9" cy="111.9" rx="6.075" ry="8.100000000000001" fill="#0A0E1A"/>
+  <circle cx="100.45" cy="109.2" r="2.43" fill="#F8FAFC"/>
+  <circle cx="138.25" cy="109.2" r="2.43" fill="#F8FAFC"/>
+  <circle cx="97.75" cy="114.6" r="1.215" fill="#F8FAFC" opacity="0.7"/>
+  <circle cx="135.55" cy="114.6" r="1.215" fill="#F8FAFC" opacity="0.7"/>
+  <ellipse cx="82.9" cy="126.75" rx="6.75" ry="3.375" fill="#A78BFA" opacity="0.35"/>
+  <ellipse cx="153.1" cy="126.75" rx="6.75" ry="3.375" fill="#A78BFA" opacity="0.35"/>
+  <path d="M 111.25,130.8 Q 118,137.55 124.75,130.8" stroke="#0A0E1A" stroke-width="2.16" fill="none" stroke-linecap="round"/>
+  <g transform="translate(660 52)">
+    <polygon points="-14,-6 -6,-14 6,-14 14,-6 14,6 6,14 -6,14 -14,6" fill="none" stroke="#06B6D4" stroke-width="1" stroke-dasharray="2 2" opacity="0.55"/>
+    <polygon points="0,-8 8,0 0,8 -8,0" fill="#06B6D4" opacity="0.35"/>
+    <polygon points="0,-5 5,0 0,5 -5,0" fill="#22D3EE"/>
   </g>
-  <text x="360.0" y="152" text-anchor="middle" font-family="Georgia, 'Crimson Text', 'Times New Roman', serif" font-size="84" font-weight="700" font-style="italic" letter-spacing="10" fill="url(#rim)">RIMURU</text>
-  <text x="360.0" y="182" text-anchor="middle" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="11" letter-spacing="6" fill="#94A3B8">TEMPEST SYSTEM</text>
-  <line x1="270.0" y1="196" x2="450.0" y2="196" stroke="url(#shimTop)" stroke-width="1"/>
-  <text x="360.0" y="216" text-anchor="middle" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="10" letter-spacing="2.8" fill="#22D3EE">UNIQUE SKILL -- COST CONTROL FOR AI CODING AGENTS</text>
-  <text x="30" y="30" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="9" letter-spacing="1.4" fill="#94A3B8">TEMPEST // 001</text>
-  <text x="690" y="30" text-anchor="end" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="9" letter-spacing="1.4" fill="#22D3EE">v0.4.0 // BENIMARU</text>
+  <text x="446" y="118" text-anchor="middle" font-family="Georgia, 'Crimson Text', 'Times New Roman', serif" font-size="78" font-weight="700" font-style="italic" letter-spacing="9" fill="url(#rim)">RIMURU</text>
+  <text x="446" y="148" text-anchor="middle" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="11" letter-spacing="6" fill="#94A3B8">TEMPEST SYSTEM</text>
+  <line x1="346" y1="162" x2="546" y2="162" stroke="url(#shimTop)" stroke-width="1"/>
+  <text x="446" y="182" text-anchor="middle" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="10" letter-spacing="2.6" fill="#22D3EE">UNIQUE SKILL -- COST CONTROL</text>
+  <text x="446" y="198" text-anchor="middle" font-family="'SF Mono', Menlo, Consolas, 'Courier New', monospace" font-size="9" letter-spacing="1.8" fill="#94A3B8">FOR AI CODING AGENTS</text>
 </svg>
