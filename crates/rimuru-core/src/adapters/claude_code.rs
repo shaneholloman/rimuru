@@ -448,14 +448,20 @@ impl ClaudeCodeAdapter {
         has_fast_mode: bool,
     ) -> f64 {
         // Pricing from https://platform.claude.com/docs/en/build-with-claude/prompt-caching#pricing
-        // (USD per 1M tokens). Every cache rate derives from the base
-        // input rate by fixed multipliers, so to refresh pricing we
-        // only need to update the base input / output pair:
+        // (USD per 1M tokens). For every model above Haiku 3 the cache
+        // rates derive from the base input rate by fixed multipliers,
+        // so to refresh pricing we generally only need to update the
+        // base input / output pair:
         //
         //   cache_read  = base_input * 0.1    (90% discount)
         //   cache_write = base_input * 1.25   (5 minute TTL, default)
         //   cache_write = base_input * 2.0    (1 hour TTL — not yet
         //                                      distinguished here, see below)
+        //
+        // Exception: Haiku 3 uses rounded whole-cent rates
+        // ($0.03 cache read, $0.30 5m cache write against a $0.25 base,
+        // i.e. 0.12x and 1.2x instead of 0.1x and 1.25x). The hardcoded
+        // values below match the published table for that tier.
         //
         // The Claude API reports cache_creation_input_tokens as a
         // single number without TTL metadata, so rimuru currently
@@ -467,10 +473,15 @@ impl ClaudeCodeAdapter {
         // suffixes) must match before the broader family fallback so
         // "claude-haiku-3" doesn't catch Haiku 3.5 first.
         let (input_rate, output_rate, cache_read_rate, cache_write_rate) = if has_fast_mode
-            && (model.contains("opus-4-6") || model.contains("opus"))
+            && model.contains("opus-4-6")
         {
             // Opus 4.6 fast mode ("priority" tier): 6x the standard
-            // rate, matching Claude Code's src/utils/modelCost.ts.
+            // Opus 4.6 rate ($5/$25 → $30/$150), matching Claude
+            // Code's src/utils/modelCost.ts. We don't know the
+            // priority multiplier for Opus 4.1 / 4 (which have a
+            // different base rate), so fast mode there falls through
+            // to the standard arm below and under-reports. Narrow
+            // this check once we can verify those rates upstream.
             (30.0, 150.0, 3.0, 37.5)
         } else {
             match model {
@@ -487,6 +498,9 @@ impl ClaudeCodeAdapter {
                 // Haiku 3 (deprecated but still billable). Matched
                 // explicitly so it doesn't fall into the Haiku 3.5
                 // arm via the `haiku` catch-all and overcharge 3x.
+                // Cache rates here are rounded whole-cents from the
+                // published table, not the 0.1x / 1.25x formula — see
+                // the "Exception" note above.
                 m if m.contains("haiku-3") => (0.25, 1.25, 0.03, 0.30),
                 // Unknown Haiku: assume 3.5 (current default)
                 m if m.contains("haiku") => (0.80, 4.0, 0.08, 1.0),
