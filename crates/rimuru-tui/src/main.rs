@@ -661,12 +661,11 @@ fn draw_budget(f: &mut Frame, app: &App, area: Rect) {
             lines.push(Line::from(vec![
                 Span::styled(
                     "— ",
-                    Style::default().fg(th.text_dim).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(th.text_dim)
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(
-                    format!("/ ${:.2}", limit),
-                    Style::default().fg(th.text_dim),
-                ),
+                Span::styled(format!("/ ${:.2}", limit), Style::default().fg(th.text_dim)),
             ]));
             lines.push(Line::from(vec![Span::styled(
                 "not tracked",
