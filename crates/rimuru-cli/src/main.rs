@@ -95,6 +95,14 @@ enum Commands {
         action: GuardAction,
     },
 
+    #[command(about = "Live context budget tracker (htop for tokens)")]
+    Ctx {
+        #[arg(long, help = "Target a specific session id (full or prefix)")]
+        session: Option<String>,
+        #[arg(long, help = "Print once and exit instead of watching")]
+        once: bool,
+    },
+
     #[command(about = "Health check")]
     Health,
 
@@ -393,6 +401,8 @@ async fn main() -> Result<()> {
             GuardAction::Status => commands::guard::status(&iii, format).await,
             GuardAction::History => commands::guard::history(&iii, format).await,
         },
+
+        Commands::Ctx { session, once } => commands::ctx::run(&iii, session, !once).await,
 
         Commands::Health => commands::health::check(&iii, format).await,
 
