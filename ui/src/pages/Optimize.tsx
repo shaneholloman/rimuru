@@ -251,7 +251,8 @@ export default function Optimize() {
                         className="text-xs px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider"
                         style={{
                           color: "var(--accent)",
-                          backgroundColor: "var(--accent)20",
+                          backgroundColor:
+                            "color-mix(in srgb, var(--accent) 12%, transparent)",
                         }}
                       >
                         {CATEGORY_LABELS[rec.category] ?? rec.category}
@@ -318,7 +319,8 @@ export default function Optimize() {
                         className="text-xs px-2 py-0.5 rounded-full font-semibold uppercase"
                         style={{
                           color: "var(--success)",
-                          backgroundColor: "var(--success)20",
+                          backgroundColor:
+                            "color-mix(in srgb, var(--success) 12%, transparent)",
                         }}
                       >
                         {CATEGORY_LABELS[rec.category] ?? rec.category}
