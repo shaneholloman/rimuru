@@ -5,8 +5,8 @@ use tracing::{info, warn};
 
 use super::sysutil::{api_response, extract_input, kv_err, require_str};
 use crate::adapters::{
-    AgentAdapter, ClaudeCodeAdapter, CodexAdapter, CopilotAdapter, CursorAdapter, GooseAdapter,
-    OpenCodeAdapter,
+    AgentAdapter, ClaudeCodeAdapter, CodexAdapter, CopilotAdapter, CursorAdapter, GeminiCliAdapter,
+    GooseAdapter, OpenCodeAdapter,
 };
 use crate::models::{Agent, AgentConfig, AgentStatus, AgentType, CostRecord, SessionStatus};
 use crate::state::StateKV;
@@ -456,6 +456,7 @@ fn get_adapter(agent_type: &AgentType) -> Option<Box<dyn AgentAdapter>> {
         AgentType::Codex => Some(Box::new(CodexAdapter::new())),
         AgentType::Goose => Some(Box::new(GooseAdapter::new())),
         AgentType::OpenCode => Some(Box::new(OpenCodeAdapter::new())),
+        AgentType::GeminiCli => Some(Box::new(GeminiCliAdapter::new())),
     }
 }
 

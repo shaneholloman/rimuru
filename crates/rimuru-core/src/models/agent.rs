@@ -11,6 +11,7 @@ pub enum AgentType {
     Codex,
     Goose,
     OpenCode,
+    GeminiCli,
 }
 
 impl AgentType {
@@ -22,6 +23,7 @@ impl AgentType {
             Self::Codex => "Codex",
             Self::Goose => "Goose",
             Self::OpenCode => "OpenCode",
+            Self::GeminiCli => "Gemini CLI",
         }
     }
 
@@ -33,6 +35,7 @@ impl AgentType {
             Self::Codex,
             Self::Goose,
             Self::OpenCode,
+            Self::GeminiCli,
         ]
     }
 }

@@ -69,6 +69,10 @@ fn build_detectors() -> Vec<AgentDetector> {
             agent_type: AgentType::OpenCode,
             paths: vec![home.join(".opencode")],
         },
+        AgentDetector {
+            agent_type: AgentType::GeminiCli,
+            paths: vec![home.join(".gemini"), home.join(".config/gemini")],
+        },
     ]
 }
 
@@ -139,6 +143,14 @@ pub fn detect_agent_config_path(agent_type: AgentType) -> Option<PathBuf> {
         AgentType::Codex => home.join(".config/codex"),
         AgentType::Goose => home.join(".config/goose"),
         AgentType::OpenCode => home.join(".opencode"),
+        AgentType::GeminiCli => {
+            let primary = home.join(".gemini");
+            if primary.exists() {
+                primary
+            } else {
+                home.join(".config/gemini")
+            }
+        }
     };
 
     if path.exists() { Some(path) } else { None }
