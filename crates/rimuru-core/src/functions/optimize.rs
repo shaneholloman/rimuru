@@ -56,94 +56,98 @@ pub struct AppliedRecommendation {
 
 // ---------- analyzers ----------
 
+/// Sonnet's $3/M input rate. Used as the pricing denominator for
+/// token-based savings estimates across every analyzer so the
+/// dashboard compares recommendations on a single baseline.
+const SONNET_INPUT_RATE_PER_M: f64 = 3.0;
+
+fn tokens_to_dollars(tokens: u64) -> f64 {
+    tokens as f64 / 1_000_000.0 * SONNET_INPUT_RATE_PER_M
+}
+
+fn u64_field(v: &Value, key: &str) -> u64 {
+    v.get(key).and_then(|v| v.as_u64()).unwrap_or(0)
+}
+
+fn str_field<'a>(v: &'a Value, key: &str, default: &'a str) -> &'a str {
+    v.get(key).and_then(|v| v.as_str()).unwrap_or(default)
+}
+
+fn f64_field(v: &Value, key: &str) -> f64 {
+    v.get(key).and_then(|v| v.as_f64()).unwrap_or(0.0)
+}
+
+fn tools_array(stats: &Value) -> &[Value] {
+    stats
+        .get("tools")
+        .and_then(|v| v.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+}
+
 /// mcp_schema: tools whose schemas exceed a token budget relative
-/// to their usage frequency. The proxy stats expose `tool_bytes` or
-/// `schema_tokens` per tool — anything over ~5k tokens that's rarely
-/// called is a candidate for progressive disclosure.
+/// to their usage frequency. The proxy stats expose `schema_tokens`
+/// per tool — anything over ~5k tokens that's rarely called is a
+/// candidate for progressive disclosure. Savings = schema_tokens
+/// * 0.8 (80% reduction assuming a minimal descriptor stays).
 fn analyze_mcp_schemas(stats: &Value) -> Vec<Recommendation> {
-    let Some(tools) = stats.get("tools").and_then(|v| v.as_array()) else {
-        return Vec::new();
-    };
-
     let mut out = Vec::new();
-    for tool in tools {
-        let name = tool
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        let schema_tokens = tool
-            .get("schema_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let calls = tool.get("call_count").and_then(|v| v.as_u64()).unwrap_or(0);
-
-        // Heuristic: schemas over 5k tokens called fewer than 10 times
-        // per session average are worth gating behind explicit
-        // progressive disclosure. Savings = schema_tokens * (1 - 0.2)
-        // = 80% reduction assuming minimal descriptor stays.
-        if schema_tokens >= 5_000 && calls < 10 {
-            let savings_tokens = (schema_tokens as f64 * 0.8) as u64;
-            let savings_dollars = savings_tokens as f64 / 1_000_000.0 * 3.0; // Sonnet rate
-            out.push(Recommendation {
-                id: Uuid::new_v4(),
-                category: "mcp_schema".into(),
-                description: format!(
-                    "Enable progressive disclosure for `{}` MCP tool — \
-                     schema is {} tokens but only called {} times. \
-                     Estimated savings: {} tokens/session.",
-                    name, schema_tokens, calls, savings_tokens
-                ),
-                estimated_savings_tokens: savings_tokens,
-                estimated_savings_dollars: savings_dollars,
-                confidence: 0.7,
-                source: "mcp_proxy_stats".into(),
-                created_at: Utc::now(),
-            });
+    for tool in tools_array(stats) {
+        let schema_tokens = u64_field(tool, "schema_tokens");
+        let calls = u64_field(tool, "call_count");
+        if schema_tokens < 5_000 || calls >= 10 {
+            continue;
         }
+        let name = str_field(tool, "name", "unknown");
+        let savings_tokens = (schema_tokens as f64 * 0.8) as u64;
+        out.push(Recommendation {
+            id: Uuid::new_v4(),
+            category: "mcp_schema".into(),
+            description: format!(
+                "Enable progressive disclosure for `{}` MCP tool — \
+                 schema is {} tokens but only called {} times. \
+                 Estimated savings: {} tokens/session.",
+                name, schema_tokens, calls, savings_tokens
+            ),
+            estimated_savings_tokens: savings_tokens,
+            estimated_savings_dollars: tokens_to_dollars(savings_tokens),
+            confidence: 0.7,
+            source: "mcp_proxy_stats".into(),
+            created_at: Utc::now(),
+        });
     }
     out
 }
 
 /// output_verbose: tools whose output averages exceed 2k tokens and
-/// who support compression. Bash, read_file, grep, and similar
-/// high-output tools are the usual targets.
+/// could benefit from `rimuru slim` compression. 60% savings is the
+/// realistic ceiling observed from the compression benchmarks.
 fn analyze_verbose_outputs(stats: &Value) -> Vec<Recommendation> {
-    let Some(tools) = stats.get("tools").and_then(|v| v.as_array()) else {
-        return Vec::new();
-    };
     let mut out = Vec::new();
-    for tool in tools {
-        let name = tool
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        let avg_output = tool
-            .get("avg_output_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let calls = tool.get("call_count").and_then(|v| v.as_u64()).unwrap_or(0);
-
-        if avg_output >= 2_000 && calls > 0 {
-            // 60% savings from compression is the realistic ceiling
-            let total_output = avg_output * calls;
-            let savings_tokens = (total_output as f64 * 0.6) as u64;
-            let savings_dollars = savings_tokens as f64 / 1_000_000.0 * 3.0;
-            out.push(Recommendation {
-                id: Uuid::new_v4(),
-                category: "output_verbose".into(),
-                description: format!(
-                    "`{}` output averages {} tokens across {} calls. \
-                     Enable `rimuru slim` compression in the MCP proxy \
-                     for an estimated {}% saving ({} tokens).",
-                    name, avg_output, calls, 60, savings_tokens
-                ),
-                estimated_savings_tokens: savings_tokens,
-                estimated_savings_dollars: savings_dollars,
-                confidence: 0.6,
-                source: "mcp_proxy_stats".into(),
-                created_at: Utc::now(),
-            });
+    for tool in tools_array(stats) {
+        let avg_output = u64_field(tool, "avg_output_tokens");
+        let calls = u64_field(tool, "call_count");
+        if avg_output < 2_000 || calls == 0 {
+            continue;
         }
+        let name = str_field(tool, "name", "unknown");
+        let total_output = avg_output * calls;
+        let savings_tokens = (total_output as f64 * 0.6) as u64;
+        out.push(Recommendation {
+            id: Uuid::new_v4(),
+            category: "output_verbose".into(),
+            description: format!(
+                "`{}` output averages {} tokens across {} calls. \
+                 Enable `rimuru slim` compression in the MCP proxy \
+                 for an estimated 60% saving ({} tokens).",
+                name, avg_output, calls, savings_tokens
+            ),
+            estimated_savings_tokens: savings_tokens,
+            estimated_savings_dollars: tokens_to_dollars(savings_tokens),
+            confidence: 0.6,
+            source: "mcp_proxy_stats".into(),
+            created_at: Utc::now(),
+        });
     }
     out
 }
@@ -159,31 +163,20 @@ fn analyze_model_mismatch(cost_records: &[Value]) -> Vec<Recommendation> {
     let mut total_overspend_tokens = 0u64;
 
     for rec in cost_records {
-        let model = rec.get("model").and_then(|v| v.as_str()).unwrap_or("");
-        let input = rec
-            .get("input_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let output = rec
-            .get("output_tokens")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let cost = rec.get("cost").and_then(|v| v.as_f64()).unwrap_or(0.0);
-
-        // Target: Opus with small, low-ratio output
+        let model = str_field(rec, "model", "");
         if !model.to_lowercase().contains("opus") {
             continue;
         }
-        if output >= 1_000 {
-            continue;
-        }
-        if input == 0 || (output as f64 / input as f64) >= 0.5 {
+        let input = u64_field(rec, "input_tokens");
+        let output = u64_field(rec, "output_tokens");
+        if output >= 1_000 || input == 0 || (output as f64 / input as f64) >= 0.5 {
             continue;
         }
 
-        // Haiku rate is roughly 20x cheaper than Opus; assume 95% savings.
+        // Haiku is roughly 20x cheaper than Opus at comparable quality
+        // for short-output tasks; assume 95% savings on each candidate.
         total_candidates += 1;
-        total_overspend_dollars += cost * 0.95;
+        total_overspend_dollars += f64_field(rec, "cost") * 0.95;
         total_overspend_tokens += output;
     }
 
