@@ -100,39 +100,60 @@ struct SyncAgent {
     write: fn(SyncConfig, &Value) -> Value,
 }
 
-fn home_join(p: &str) -> PathBuf {
-    dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("/tmp"))
-        .join(p)
+/// Resolve a path beneath the user's home directory.
+///
+/// Returns `None` when `dirs::home_dir()` can't find a home directory
+/// (e.g. minimal containers, cron with no `HOME`). We explicitly do
+/// NOT fall back to `/tmp`: agent configs contain MCP env vars which
+/// often hold API keys, and `/tmp` is world-readable on most systems.
+/// The caller filters missing entries out of the agent table.
+fn home_join(p: &str) -> Option<PathBuf> {
+    dirs::home_dir().map(|h| h.join(p))
 }
 
 fn agent_table() -> Vec<SyncAgent> {
-    vec![
-        SyncAgent {
-            name: "claude_code",
-            config_file: home_join(".claude/settings.json"),
-            read: read_claude_code,
-            write: write_claude_code,
-        },
-        SyncAgent {
-            name: "cursor",
-            config_file: home_join(".cursor/mcp.json"),
-            read: read_cursor,
-            write: write_cursor,
-        },
-        SyncAgent {
-            name: "codex",
-            config_file: home_join(".config/codex/config.yaml"),
-            read: read_codex,
-            write: write_codex,
-        },
-        SyncAgent {
-            name: "gemini_cli",
-            config_file: home_join(".gemini/settings.json"),
-            read: read_gemini,
-            write: write_gemini,
-        },
-    ]
+    // Each entry drops out silently if its home-relative path can't be
+    // resolved. In the normal desktop install every entry is present;
+    // this filter exists so headless / container environments don't
+    // silently leak config data to /tmp.
+    let specs: &[(
+        &'static str,
+        &str,
+        fn(&Value) -> SyncConfig,
+        fn(SyncConfig, &Value) -> Value,
+    )] = &[
+        (
+            "claude_code",
+            ".claude/settings.json",
+            read_claude_code as fn(&Value) -> SyncConfig,
+            write_claude_code as fn(SyncConfig, &Value) -> Value,
+        ),
+        ("cursor", ".cursor/mcp.json", read_cursor, write_cursor),
+        (
+            "codex",
+            ".config/codex/config.yaml",
+            read_codex,
+            write_codex,
+        ),
+        (
+            "gemini_cli",
+            ".gemini/settings.json",
+            read_gemini,
+            write_gemini,
+        ),
+    ];
+
+    specs
+        .iter()
+        .filter_map(|(name, rel, read, write)| {
+            home_join(rel).map(|config_file| SyncAgent {
+                name,
+                config_file,
+                read: *read,
+                write: *write,
+            })
+        })
+        .collect()
 }
 
 // ---------- shared parsers ----------
@@ -340,7 +361,7 @@ fn load_config_file(path: &PathBuf) -> Result<Option<Value>, String> {
     let ext = path.extension().and_then(|e| e.to_str());
     let val =
         match ext {
-            Some("yaml") | Some("yml") => serde_yaml::from_str::<Value>(&raw)
+            Some("yaml") | Some("yml") => yaml_serde::from_str::<Value>(&raw)
                 .map_err(|e| format!("yaml parse failed: {}", e))?,
             _ => serde_json::from_str::<Value>(&raw)
                 .map_err(|e| format!("json parse failed: {}", e))?,
@@ -373,7 +394,7 @@ fn write_config_file(path: &PathBuf, value: &Value) -> Result<Option<PathBuf>, S
     let ext = path.extension().and_then(|e| e.to_str());
     let serialized = match ext {
         Some("yaml") | Some("yml") => {
-            serde_yaml::to_string(value).map_err(|e| format!("yaml serialize failed: {}", e))?
+            yaml_serde::to_string(value).map_err(|e| format!("yaml serialize failed: {}", e))?
         }
         _ => serde_json::to_string_pretty(value)
             .map_err(|e| format!("json serialize failed: {}", e))?,
@@ -435,6 +456,24 @@ fn diff_configs(current: &SyncConfig, target: &SyncConfig) -> Value {
 
     let instructions_changed = current.custom_instructions != target.custom_instructions;
 
+    let model_prefs_added: Vec<&String> = target
+        .model_preferences
+        .keys()
+        .filter(|k| !current.model_preferences.contains_key(*k))
+        .collect();
+    let model_prefs_removed: Vec<&String> = current
+        .model_preferences
+        .keys()
+        .filter(|k| !target.model_preferences.contains_key(*k))
+        .collect();
+    let model_prefs_changed: Vec<&String> = target
+        .model_preferences
+        .iter()
+        .filter(|(k, v)| current.model_preferences.get(*k) != Some(*v))
+        .filter(|(k, _)| current.model_preferences.contains_key(*k))
+        .map(|(k, _)| k)
+        .collect();
+
     json!({
         "mcp_servers": {
             "added": servers_added,
@@ -448,6 +487,11 @@ fn diff_configs(current: &SyncConfig, target: &SyncConfig) -> Value {
         "denied_tools": {
             "added": deny_added,
             "removed": deny_removed,
+        },
+        "model_preferences": {
+            "added": model_prefs_added,
+            "removed": model_prefs_removed,
+            "changed": model_prefs_changed,
         },
         "custom_instructions_changed": instructions_changed,
     })
@@ -539,8 +583,14 @@ fn register_diff(iii: &III, _kv: &StateKV) {
                 }
             }
 
+            // An explicit target that fails to parse is a user error;
+            // we return it instead of silently falling back to the
+            // merged canonical, which would leave the caller thinking
+            // they were diffing against their own JSON.
             let target: SyncConfig = match target_param {
-                Some(v) => serde_json::from_value(v).unwrap_or(canonical.clone()),
+                Some(v) => serde_json::from_value(v).map_err(|e| {
+                    iii_sdk::IIIError::Handler(format!("invalid target: {}", e))
+                })?,
                 None => canonical.clone(),
             };
 
@@ -581,9 +631,26 @@ fn register_import(iii: &III, _kv: &StateKV) {
             let mut results = serde_json::Map::new();
 
             for agent in agent_table() {
-                let existing = load_config_file(&agent.config_file)
-                    .unwrap_or(None)
-                    .unwrap_or(Value::Object(serde_json::Map::new()));
+                // Read errors during import match export's behavior:
+                // log a warning, surface the error in the per-agent
+                // result, and treat the file as empty so the write
+                // path still runs (which will create a fresh file
+                // and produce a useful diff for the dry-run).
+                let (existing, read_error): (Value, Option<String>) =
+                    match load_config_file(&agent.config_file) {
+                        Ok(Some(v)) => (v, None),
+                        Ok(None) => (Value::Object(serde_json::Map::new()), None),
+                        Err(e) => {
+                            warn!(
+                                "import: read failed for {} at {}: {}",
+                                agent.name,
+                                agent.config_file.display(),
+                                e
+                            );
+                            (Value::Object(serde_json::Map::new()), Some(e))
+                        }
+                    };
+
                 let current_cfg = (agent.read)(&existing);
                 let diff = diff_configs(&current_cfg, &canonical);
                 let new_value = (agent.write)(canonical.clone(), &existing);
@@ -592,6 +659,9 @@ fn register_import(iii: &III, _kv: &StateKV) {
                     "config_file": agent.config_file.to_string_lossy(),
                     "diff": diff,
                 });
+                if let Some(err) = read_error {
+                    entry["read_error"] = Value::String(err);
+                }
 
                 if apply && agent.config_file.parent().is_some_and(|p| p.exists()) {
                     match write_config_file(&agent.config_file, &new_value) {
