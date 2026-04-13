@@ -77,13 +77,15 @@ Everything ships as [iii-engine](https://github.com/iii-hq/iii) primitives (Work
 curl -fsSL https://raw.githubusercontent.com/rohitg00/rimuru/main/install.sh | bash
 ```
 
-Installs the iii engine if missing. Drops `rimuru-worker`, `rimuru`, `rimuru-tui` into `~/.local/bin`. Takes about thirty seconds on a warm cache.
+Installs the iii engine if missing. Drops `rimuru-worker`, `rimuru`, `rimuru-tui` into `~/.local/bin`, copies the iii config to `~/.config/rimuru/config.yaml`, and creates the durable state directory at `~/.local/share/rimuru/`. Takes about thirty seconds on a warm cache.
 
 ```bash
-iii                       # start the iii engine
-rimuru-worker             # start the worker
+iii --config ~/.config/rimuru/config.yaml  # start iii with durable state
+rimuru-worker                              # start the worker
 open http://localhost:3100
 ```
+
+Rimuru stores cost records, budget counters, guard history, and session data under `~/.local/share/rimuru/` via iii-engine's file-backed KV. Everything survives restart. Running bare `iii` (without `--config`) falls back to the default in-memory store, which iii itself warns against — you'll see every cost record, budget counter, and guard entry disappear on shutdown.
 
 Detect your agents. See what you are spending. Set a cap.
 
