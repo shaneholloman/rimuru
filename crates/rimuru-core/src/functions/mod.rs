@@ -15,6 +15,7 @@ pub mod plugins;
 pub mod runaway;
 pub mod sessions;
 pub mod skillkit;
+pub mod sync;
 pub mod sysutil;
 
 use std::sync::Arc;
@@ -42,6 +43,7 @@ pub fn register_all(iii: &III, kv: &StateKV) {
     mcp_proxy::register(iii, kv, proxy);
     runaway::register(iii, kv);
     skillkit::register(iii, kv);
+    sync::register(iii, kv);
     health::register(iii, kv);
     config::register(iii, kv);
     hardware::register(iii, kv);

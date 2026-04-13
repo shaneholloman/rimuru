@@ -278,6 +278,22 @@ const ROUTES: &[Route] = &[
         path: "api/runaway/configure",
         function_id: "rimuru.runaway.configure",
     },
+    // Cross-agent config sync
+    Route {
+        method: "GET",
+        path: "api/sync/export",
+        function_id: "rimuru.sync.export",
+    },
+    Route {
+        method: "GET",
+        path: "api/sync/diff",
+        function_id: "rimuru.sync.diff",
+    },
+    Route {
+        method: "POST",
+        path: "api/sync/import",
+        function_id: "rimuru.sync.import",
+    },
     // Guard wrapper
     Route {
         method: "GET",
