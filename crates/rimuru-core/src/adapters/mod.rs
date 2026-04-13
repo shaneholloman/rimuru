@@ -1,12 +1,18 @@
 use async_trait::async_trait;
+pub mod amp;
 pub mod claude_code;
+pub mod cline;
+pub mod cline_base;
 pub mod codex;
 pub mod copilot;
 pub mod cursor;
 pub mod detection;
 pub mod gemini_cli;
 pub mod goose;
+pub mod kiro;
 pub mod opencode;
+pub mod roo;
+pub mod windsurf;
 
 use serde_json::Value;
 
@@ -114,11 +120,16 @@ impl<T: AdapterCore> SessionMonitor for T {
     }
 }
 
+pub use amp::AmpAdapter;
 pub use claude_code::ClaudeCodeAdapter;
+pub use cline::ClineAdapter;
 pub use codex::CodexAdapter;
 pub use copilot::CopilotAdapter;
 pub use cursor::CursorAdapter;
 pub use detection::{detect_agent_config_path, detect_all_with_paths, detect_installed_agents};
 pub use gemini_cli::GeminiCliAdapter;
 pub use goose::GooseAdapter;
+pub use kiro::KiroAdapter;
 pub use opencode::OpenCodeAdapter;
+pub use roo::RooAdapter;
+pub use windsurf::WindsurfAdapter;
