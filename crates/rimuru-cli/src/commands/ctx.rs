@@ -10,6 +10,15 @@ use crate::output;
 const BAR_WIDTH: usize = 30;
 const REFRESH_MS: u64 = 1500;
 
+struct CursorGuard;
+
+impl Drop for CursorGuard {
+    fn drop(&mut self) {
+        print!("\x1b[?25h");
+        let _ = std::io::stdout().flush();
+    }
+}
+
 pub async fn run(iii: &III, session_filter: Option<String>, watch: bool) -> Result<()> {
     if !watch {
         render_once(iii, session_filter.as_deref()).await?;
@@ -24,13 +33,9 @@ pub async fn run(iii: &III, session_filter: Option<String>, watch: bool) -> Resu
 
     print!("\x1b[?25l");
     let _ = std::io::stdout().flush();
+    let _guard = CursorGuard;
 
-    let result = run_loop(iii, session_filter.as_deref()).await;
-
-    print!("\x1b[?25h");
-    let _ = std::io::stdout().flush();
-
-    result
+    run_loop(iii, session_filter.as_deref()).await
 }
 
 async fn run_loop(iii: &III, session_filter: Option<&str>) -> Result<()> {
@@ -191,9 +196,9 @@ fn format_tokens(n: u64) -> String {
 }
 
 fn short_id(sid: &str) -> String {
-    if sid.len() > 12 {
-        format!("{}...", &sid[..12])
-    } else {
-        sid.to_string()
+    let mut iter = sid.char_indices();
+    match iter.nth(12) {
+        Some((idx, _)) => format!("{}...", &sid[..idx]),
+        None => sid.to_string(),
     }
 }
