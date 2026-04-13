@@ -4,6 +4,7 @@ pub mod codex;
 pub mod copilot;
 pub mod cursor;
 pub mod detection;
+pub mod gemini_cli;
 pub mod goose;
 pub mod opencode;
 
@@ -118,5 +119,6 @@ pub use codex::CodexAdapter;
 pub use copilot::CopilotAdapter;
 pub use cursor::CursorAdapter;
 pub use detection::{detect_agent_config_path, detect_all_with_paths, detect_installed_agents};
+pub use gemini_cli::GeminiCliAdapter;
 pub use goose::GooseAdapter;
 pub use opencode::OpenCodeAdapter;
