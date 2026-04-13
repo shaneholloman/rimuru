@@ -85,7 +85,9 @@ rimuru-worker                              # start the worker
 open http://localhost:3100
 ```
 
-Rimuru stores cost records, budget counters, guard history, and session data under `~/.local/share/rimuru/` via iii-engine's file-backed KV. Everything survives restart. Running bare `iii` (without `--config`) falls back to the default in-memory store, which iii itself warns against — you'll see every cost record, budget counter, and guard entry disappear on shutdown.
+Rimuru stores cost records, budget counters, guard history, and session data under `~/.local/share/rimuru/` via iii-engine's file-backed KV. The shipped config flushes dirty state every 250 ms (`save_interval_ms: 250`), so restart-survival is bounded at roughly a quarter second of the most recent writes — iii-engine doesn't currently flush on shutdown, so anything written in the last flush window can be lost if the process is killed. For everyday use that's negligible; if you're running experiments where every last cost row matters, stop iii cleanly and give it a second before restart. Running bare `iii` (without `--config`) or `iii --use-default-config` falls back to the in-memory store, which iii itself warns against — everything you record disappears on shutdown.
+
+Override the data directory with `RIMURU_DATA_DIR` when running the installer (e.g. `RIMURU_DATA_DIR=/var/lib/rimuru ./install.sh`); the installer rewrites the config in place so iii honors the override.
 
 Detect your agents. See what you are spending. Set a cap.
 
