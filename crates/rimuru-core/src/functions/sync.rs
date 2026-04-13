@@ -210,6 +210,56 @@ fn render_mcp_servers(servers: &BTreeMap<String, McpServerConfig>) -> Value {
     Value::Object(out)
 }
 
+// ---------- shared helpers ----------
+
+/// Collect a JSON array of strings, dropping non-string entries.
+fn json_str_array(v: &Value) -> Vec<String> {
+    v.as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Build a JSON array from a slice of strings.
+fn to_json_str_array(items: &[String]) -> Value {
+    Value::Array(items.iter().map(|s| Value::String(s.clone())).collect())
+}
+
+/// Shared read path: grab mcpServers under `servers_key` and the
+/// default model under `model`. Used by read_cursor (model=None),
+/// read_codex (servers_key="mcp_servers"), and read_gemini.
+fn read_servers_and_model(content: &Value, servers_key: &str, with_model: bool) -> SyncConfig {
+    let mut cfg = SyncConfig::default();
+    if let Some(servers) = content.get(servers_key) {
+        cfg.mcp_servers = parse_mcp_servers(servers);
+    }
+    if with_model && let Some(model) = content.get("model").and_then(|v| v.as_str()) {
+        cfg.model_preferences
+            .insert("default".into(), model.to_string());
+    }
+    cfg
+}
+
+/// Shared write path: start from the existing object so unknown keys
+/// survive, overwrite mcpServers under `servers_key`, and optionally
+/// write the default model.
+fn write_servers_and_model(
+    cfg: SyncConfig,
+    existing: &Value,
+    servers_key: &str,
+    with_model: bool,
+) -> Value {
+    let mut out = existing.as_object().cloned().unwrap_or_default();
+    out.insert(servers_key.into(), render_mcp_servers(&cfg.mcp_servers));
+    if with_model && let Some(default_model) = cfg.model_preferences.get("default") {
+        out.insert("model".into(), Value::String(default_model.clone()));
+    }
+    Value::Object(out)
+}
+
 // ---------- Claude Code ----------
 
 fn read_claude_code(content: &Value) -> SyncConfig {
@@ -217,25 +267,11 @@ fn read_claude_code(content: &Value) -> SyncConfig {
     if let Some(servers) = content.get("mcpServers") {
         cfg.mcp_servers = parse_mcp_servers(servers);
     }
-    if let Some(allowed) = content
-        .get("permissions")
-        .and_then(|p| p.get("allow"))
-        .and_then(|a| a.as_array())
-    {
-        cfg.allowed_tools = allowed
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect();
+    if let Some(allowed) = content.get("permissions").and_then(|p| p.get("allow")) {
+        cfg.allowed_tools = json_str_array(allowed);
     }
-    if let Some(denied) = content
-        .get("permissions")
-        .and_then(|p| p.get("deny"))
-        .and_then(|d| d.as_array())
-    {
-        cfg.denied_tools = denied
-            .iter()
-            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-            .collect();
+    if let Some(denied) = content.get("permissions").and_then(|p| p.get("deny")) {
+        cfg.denied_tools = json_str_array(denied);
     }
     if let Some(instructions) = content.get("customInstructions").and_then(|v| v.as_str()) {
         cfg.custom_instructions = Some(instructions.to_string());
@@ -254,24 +290,8 @@ fn write_claude_code(cfg: SyncConfig, existing: &Value) -> Value {
         .and_then(|v| v.as_object())
         .cloned()
         .unwrap_or_default();
-    perms.insert(
-        "allow".into(),
-        Value::Array(
-            cfg.allowed_tools
-                .iter()
-                .map(|s| Value::String(s.clone()))
-                .collect(),
-        ),
-    );
-    perms.insert(
-        "deny".into(),
-        Value::Array(
-            cfg.denied_tools
-                .iter()
-                .map(|s| Value::String(s.clone()))
-                .collect(),
-        ),
-    );
+    perms.insert("allow".into(), to_json_str_array(&cfg.allowed_tools));
+    perms.insert("deny".into(), to_json_str_array(&cfg.denied_tools));
     out.insert("permissions".into(), Value::Object(perms));
 
     if let Some(instructions) = cfg.custom_instructions {
@@ -280,69 +300,31 @@ fn write_claude_code(cfg: SyncConfig, existing: &Value) -> Value {
     Value::Object(out)
 }
 
-// ---------- Cursor ----------
+// ---------- Cursor / Codex / Gemini CLI ----------
 
 fn read_cursor(content: &Value) -> SyncConfig {
-    // Cursor uses ~/.cursor/mcp.json which is JUST { "mcpServers": ... }
-    let mut cfg = SyncConfig::default();
-    if let Some(servers) = content.get("mcpServers") {
-        cfg.mcp_servers = parse_mcp_servers(servers);
-    }
-    cfg
+    read_servers_and_model(content, "mcpServers", false)
 }
 
 fn write_cursor(cfg: SyncConfig, existing: &Value) -> Value {
-    let mut out = existing.as_object().cloned().unwrap_or_default();
-    out.insert("mcpServers".into(), render_mcp_servers(&cfg.mcp_servers));
-    Value::Object(out)
+    write_servers_and_model(cfg, existing, "mcpServers", false)
 }
 
-// ---------- Codex ----------
-
 fn read_codex(content: &Value) -> SyncConfig {
-    // Codex stores config as YAML (read into Value via serde_yaml in
-    // load_config_file). Field is `mcp_servers` (snake_case).
-    let mut cfg = SyncConfig::default();
-    if let Some(servers) = content.get("mcp_servers") {
-        cfg.mcp_servers = parse_mcp_servers(servers);
-    }
-    if let Some(model) = content.get("model").and_then(|v| v.as_str()) {
-        cfg.model_preferences
-            .insert("default".into(), model.to_string());
-    }
-    cfg
+    // Codex stores config as YAML. Field is mcp_servers (snake_case).
+    read_servers_and_model(content, "mcp_servers", true)
 }
 
 fn write_codex(cfg: SyncConfig, existing: &Value) -> Value {
-    let mut out = existing.as_object().cloned().unwrap_or_default();
-    out.insert("mcp_servers".into(), render_mcp_servers(&cfg.mcp_servers));
-    if let Some(default_model) = cfg.model_preferences.get("default") {
-        out.insert("model".into(), Value::String(default_model.clone()));
-    }
-    Value::Object(out)
+    write_servers_and_model(cfg, existing, "mcp_servers", true)
 }
 
-// ---------- Gemini CLI ----------
-
 fn read_gemini(content: &Value) -> SyncConfig {
-    let mut cfg = SyncConfig::default();
-    if let Some(servers) = content.get("mcpServers") {
-        cfg.mcp_servers = parse_mcp_servers(servers);
-    }
-    if let Some(model) = content.get("model").and_then(|v| v.as_str()) {
-        cfg.model_preferences
-            .insert("default".into(), model.to_string());
-    }
-    cfg
+    read_servers_and_model(content, "mcpServers", true)
 }
 
 fn write_gemini(cfg: SyncConfig, existing: &Value) -> Value {
-    let mut out = existing.as_object().cloned().unwrap_or_default();
-    out.insert("mcpServers".into(), render_mcp_servers(&cfg.mcp_servers));
-    if let Some(default_model) = cfg.model_preferences.get("default") {
-        out.insert("model".into(), Value::String(default_model.clone()));
-    }
-    Value::Object(out)
+    write_servers_and_model(cfg, existing, "mcpServers", true)
 }
 
 // ---------- file IO ----------
