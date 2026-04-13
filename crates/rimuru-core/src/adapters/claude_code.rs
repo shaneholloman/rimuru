@@ -447,21 +447,50 @@ impl ClaudeCodeAdapter {
         web_search_requests: u64,
         has_fast_mode: bool,
     ) -> f64 {
-        // Pricing from Claude Code source: src/utils/modelCost.ts
-        // https://platform.claude.com/docs/en/about-claude/pricing
+        // Pricing from https://platform.claude.com/docs/en/build-with-claude/prompt-caching#pricing
+        // (USD per 1M tokens). Every cache rate derives from the base
+        // input rate by fixed multipliers, so to refresh pricing we
+        // only need to update the base input / output pair:
+        //
+        //   cache_read  = base_input * 0.1    (90% discount)
+        //   cache_write = base_input * 1.25   (5 minute TTL, default)
+        //   cache_write = base_input * 2.0    (1 hour TTL — not yet
+        //                                      distinguished here, see below)
+        //
+        // The Claude API reports cache_creation_input_tokens as a
+        // single number without TTL metadata, so rimuru currently
+        // bills all cache writes at the 5-minute rate. Usage with
+        // ttl="1h" is under-reported by ~37%. If we start tracking
+        // the TTL in session metadata we can split this arm.
+        //
+        // Arm order: more specific variants (4-6, 4-5, 4-1, 4-5
+        // suffixes) must match before the broader family fallback so
+        // "claude-haiku-3" doesn't catch Haiku 3.5 first.
         let (input_rate, output_rate, cache_read_rate, cache_write_rate) = if has_fast_mode
             && (model.contains("opus-4-6") || model.contains("opus"))
         {
-            // Opus 4.6 fast mode: $30/$150
+            // Opus 4.6 fast mode ("priority" tier): 6x the standard
+            // rate, matching Claude Code's src/utils/modelCost.ts.
             (30.0, 150.0, 3.0, 37.5)
         } else {
             match model {
+                // Opus: 4.6 / 4.5 share one rate, 4.1 / 4 share another
                 m if m.contains("opus-4-6") || m.contains("opus-4-5") => (5.0, 25.0, 0.50, 6.25),
                 m if m.contains("opus-4-1") || m.contains("opus-4") => (15.0, 75.0, 1.50, 18.75),
                 m if m.contains("opus") => (5.0, 25.0, 0.50, 6.25),
+                // Sonnet: 4.6 / 4.5 / 4 / 3.7 all $3/$15
                 m if m.contains("sonnet") => (3.0, 15.0, 0.30, 3.75),
+                // Haiku 4.5
                 m if m.contains("haiku-4-5") => (1.0, 5.0, 0.10, 1.25),
+                // Haiku 3.5
+                m if m.contains("haiku-3-5") => (0.80, 4.0, 0.08, 1.0),
+                // Haiku 3 (deprecated but still billable). Matched
+                // explicitly so it doesn't fall into the Haiku 3.5
+                // arm via the `haiku` catch-all and overcharge 3x.
+                m if m.contains("haiku-3") => (0.25, 1.25, 0.03, 0.30),
+                // Unknown Haiku: assume 3.5 (current default)
                 m if m.contains("haiku") => (0.80, 4.0, 0.08, 1.0),
+                // Unknown model: assume Sonnet (middle-tier)
                 _ => (3.0, 15.0, 0.30, 3.75),
             }
         };
