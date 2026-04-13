@@ -278,6 +278,22 @@ const ROUTES: &[Route] = &[
         path: "api/runaway/configure",
         function_id: "rimuru.runaway.configure",
     },
+    // Optimization recommendations
+    Route {
+        method: "GET",
+        path: "api/optimize/recommendations",
+        function_id: "rimuru.optimize.recommendations",
+    },
+    Route {
+        method: "POST",
+        path: "api/optimize/apply",
+        function_id: "rimuru.optimize.apply",
+    },
+    Route {
+        method: "GET",
+        path: "api/optimize/applied",
+        function_id: "rimuru.optimize.applied",
+    },
     // Guard wrapper
     Route {
         method: "GET",
