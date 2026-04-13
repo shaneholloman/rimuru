@@ -91,28 +91,29 @@ impl LanguageDef for RustLanguage {
     }
 
     fn render_signature(&self, node: &Node, source: &str) -> Option<Signature> {
-        let kind = match node.kind() {
-            "function_item" => "fn",
-            "struct_item" => "struct",
-            "enum_item" => "enum",
-            "trait_item" => "trait",
-            "impl_item" => "impl",
-            "type_item" => "type",
-            "const_item" => "const",
-            "static_item" => "static",
-            "mod_item" => "mod",
-            "use_declaration" => "use",
-            "macro_definition" => "macro",
+        let node_kind = node.kind();
+
+        let (kind, has_body) = match node_kind {
+            "function_item" => ("fn", true),
+            "struct_item" => ("struct", true),
+            "enum_item" => ("enum", true),
+            "trait_item" => ("trait", true),
+            "impl_item" => ("impl", true),
+            "mod_item" => ("mod", true),
+            "type_item" => ("type", false),
+            "const_item" => ("const", false),
+            "static_item" => ("static", false),
+            "use_declaration" => ("use", false),
+            "macro_definition" => ("macro", false),
             _ => return None,
         };
 
-        let name = match node.kind() {
-            "impl_item" => {
-                // Impls don't have a plain name; use the target type.
-                node.child_by_field_name("type")
-                    .and_then(|n| node_text(&n, source))
-                    .unwrap_or_else(|| "impl".into())
-            }
+        let name = match node_kind {
+            // Impls don't have a plain name; use the target type.
+            "impl_item" => node
+                .child_by_field_name("type")
+                .and_then(|n| node_text(&n, source))
+                .unwrap_or_else(|| "impl".into()),
             "use_declaration" => node
                 .child_by_field_name("argument")
                 .and_then(|n| node_text(&n, source))
@@ -123,24 +124,19 @@ impl LanguageDef for RustLanguage {
                 .unwrap_or_else(|| "?".into()),
         };
 
-        // Build the signature string:
-        // - For fn: everything up to (but not including) the body block
-        // - For struct/enum/trait/impl: the header line up to the first `{`
-        // - For type/const/static/use/mod/macro: the full line up to `;`
-        let signature = match node.kind() {
-            "function_item" => strip_body(node, source, "body"),
-            "struct_item" | "enum_item" | "trait_item" | "impl_item" | "mod_item" => {
-                strip_body(node, source, "body")
-            }
-            _ => node_text(node, source).unwrap_or_default(),
+        // Body-bearing items (fn, struct, enum, trait, impl, mod) have
+        // their body stripped. Everything else is used verbatim.
+        let signature = if has_body {
+            strip_body(node, source, "body")
+        } else {
+            node_text(node, source).unwrap_or_default()
         };
 
-        let line = node.start_position().row + 1;
         Some(Signature {
             kind: kind.into(),
             name,
             signature: signature.trim().to_string(),
-            line,
+            line: node.start_position().row + 1,
         })
     }
 }
@@ -151,40 +147,25 @@ fn node_text(node: &Node, source: &str) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Return the full node text minus the named `body_field` child.
-/// Preserves whitespace between siblings so the signature reads
-/// naturally in the output.
+/// Return the full node text minus the named `body_field` child,
+/// collapsed onto one line and suffixed with `{...}` so a multi-line
+/// signature reads naturally in the outline.
 fn strip_body(node: &Node, source: &str, body_field: &str) -> String {
-    let full = match node_text(node, source) {
-        Some(t) => t,
-        None => return String::new(),
+    let Some(full) = node_text(node, source) else {
+        return String::new();
     };
     let Some(body) = node.child_by_field_name(body_field) else {
         return full;
     };
-    let start = body.start_byte();
-    let node_start = node.start_byte();
-    let offset = start.saturating_sub(node_start);
+    let offset = body.start_byte().saturating_sub(node.start_byte());
     if offset == 0 || offset > full.len() {
         return full;
     }
-    let header = &full[..offset];
-    // Collapse internal whitespace so multi-line function signatures
-    // don't blow up the outline format. Keep single spaces.
-    let mut out = String::with_capacity(header.len());
-    let mut last_space = false;
-    for ch in header.chars() {
-        if ch.is_whitespace() {
-            if !last_space {
-                out.push(' ');
-                last_space = true;
-            }
-        } else {
-            out.push(ch);
-            last_space = false;
-        }
-    }
-    format!("{} {{...}}", out.trim())
+    let header: String = full[..offset]
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!("{} {{...}}", header)
 }
 
 // ---------- language dispatch ----------
