@@ -445,8 +445,19 @@ const MAX: u32 = 42;
     fn rust_extract_symbol_returns_full_body() {
         let lang = RustLanguage;
         let text = extract_symbol(&lang, SAMPLE, "bump").expect("found bump");
-        assert!(text.contains("count += 1"));
-        assert!(text.contains("bump {"));
+        // Signature must be part of what we returned, not just body text.
+        // "bump {" inside the println! would satisfy a weaker check and
+        // hide a regression where extract_symbol only returned the body.
+        assert!(
+            text.contains("fn bump(&mut self)"),
+            "missing function signature: {}",
+            text
+        );
+        assert!(
+            text.contains("count += 1"),
+            "missing function body: {}",
+            text
+        );
     }
 
     #[test]
