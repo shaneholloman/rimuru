@@ -181,6 +181,16 @@ export default function ConfigSync() {
         ].sort(),
       );
     } catch (err) {
+      // Drop any stale successful-refresh state so the Sync all
+      // button can't act on data from a previous load. Without this,
+      // a user could open the confirm dialog, hit refresh, watch it
+      // fail, and still click through and apply the pre-failure
+      // canonical.
+      setCanonical(null);
+      setDiffs({});
+      setErrors({});
+      setAgentNames([]);
+      setConfirmOpen(false);
       setPageError(err instanceof Error ? err.message : "Failed to load sync state");
     } finally {
       setLoading(false);
@@ -191,8 +201,29 @@ export default function ConfigSync() {
     void refresh();
   }, [refresh]);
 
+  const totalChanges = agentNames.reduce(
+    (acc, name) => acc + diffCount(diffs[name] ?? emptyDiff()),
+    0,
+  );
+  // Block Sync-all whenever export reported a read error. The import
+  // handler's write gate (LoadState::Failed) refuses to write that
+  // specific agent, but disabling the button keeps the user from
+  // clicking through and wondering why the error entry was skipped.
+  const hasReadErrors = Object.keys(errors).length > 0;
+  // Single readiness predicate reused by the main Sync button and
+  // the confirm dialog's apply button. Keeping them in sync prevents
+  // the dialog from running applySync() on stale state after a
+  // failed refresh.
+  const syncBlocked =
+    totalChanges === 0 ||
+    syncing ||
+    loading ||
+    !canonical ||
+    hasReadErrors ||
+    !!pageError;
+
   async function applySync() {
-    if (!canonical) return;
+    if (syncBlocked) return;
     setSyncing(true);
     setPageError(null);
     try {
@@ -209,16 +240,6 @@ export default function ConfigSync() {
       setSyncing(false);
     }
   }
-
-  const totalChanges = agentNames.reduce(
-    (acc, name) => acc + diffCount(diffs[name] ?? emptyDiff()),
-    0,
-  );
-  // Block Sync-all whenever export reported a read error. The import
-  // handler's write gate (LoadState::Failed) refuses to write that
-  // specific agent, but disabling the button keeps the user from
-  // clicking through and wondering why the error entry was skipped.
-  const hasReadErrors = Object.keys(errors).length > 0;
 
   return (
     <div className="space-y-4 max-w-3xl">
@@ -289,9 +310,7 @@ export default function ConfigSync() {
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}
-            disabled={
-              totalChanges === 0 || syncing || !canonical || hasReadErrors
-            }
+            disabled={syncBlocked}
             className="px-4 py-2 text-sm font-medium rounded-lg bg-[var(--accent)] text-white disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Sync all
@@ -318,7 +337,7 @@ export default function ConfigSync() {
             <button
               type="button"
               onClick={() => void applySync()}
-              disabled={syncing}
+              disabled={syncBlocked}
               className="text-xs px-3 py-1 rounded-lg bg-[var(--warning)] text-white"
             >
               {syncing ? "applying..." : "yes, sync all"}

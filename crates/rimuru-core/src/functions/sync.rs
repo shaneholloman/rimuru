@@ -96,9 +96,19 @@ impl SyncConfig {
 struct SyncAgent {
     name: &'static str,
     config_file: PathBuf,
-    read: fn(&Value) -> SyncConfig,
-    write: fn(SyncConfig, &Value) -> Value,
+    read: ReadFn,
+    write: WriteFn,
 }
+
+/// Adapter-supplied reader: parse a native config Value into a canonical SyncConfig.
+type ReadFn = fn(&Value) -> SyncConfig;
+/// Adapter-supplied writer: render a canonical SyncConfig back into the
+/// native Value, preserving any unknown keys from `existing`.
+type WriteFn = fn(SyncConfig, &Value) -> Value;
+/// Static table row: (short name, home-relative path, reader, writer).
+/// Named alias keeps clippy::type-complexity quiet without touching
+/// the call site.
+type AgentSpec = (&'static str, &'static str, ReadFn, WriteFn);
 
 /// Resolve a path beneath the user's home directory.
 ///
@@ -116,17 +126,12 @@ fn agent_table() -> Vec<SyncAgent> {
     // resolved. In the normal desktop install every entry is present;
     // this filter exists so headless / container environments don't
     // silently leak config data to /tmp.
-    let specs: &[(
-        &'static str,
-        &str,
-        fn(&Value) -> SyncConfig,
-        fn(SyncConfig, &Value) -> Value,
-    )] = &[
+    let specs: &[AgentSpec] = &[
         (
             "claude_code",
             ".claude/settings.json",
-            read_claude_code as fn(&Value) -> SyncConfig,
-            write_claude_code as fn(SyncConfig, &Value) -> Value,
+            read_claude_code,
+            write_claude_code,
         ),
         ("cursor", ".cursor/mcp.json", read_cursor, write_cursor),
         (

@@ -149,13 +149,12 @@ pub async fn sync_diff(iii: &III, agent_filter: Option<&str>) -> Result<()> {
 
 fn print_sync_diff(diff: &Value) {
     let print_list = |label: &str, key1: &str, key2: &str| {
-        if let Some(section) = diff.get(key1).and_then(|v| v.as_object()) {
-            if let Some(added) = section.get(key2).and_then(|v| v.as_array())
-                && !added.is_empty()
-            {
-                let names: Vec<&str> = added.iter().filter_map(|v| v.as_str()).collect();
-                println!("  {}: {}", label, names.join(", "));
-            }
+        if let Some(section) = diff.get(key1).and_then(|v| v.as_object())
+            && let Some(added) = section.get(key2).and_then(|v| v.as_array())
+            && !added.is_empty()
+        {
+            let names: Vec<&str> = added.iter().filter_map(|v| v.as_str()).collect();
+            println!("  {}: {}", label, names.join(", "));
         }
     };
 
@@ -166,6 +165,9 @@ fn print_sync_diff(diff: &Value) {
     print_list("allowed tools removed", "allowed_tools", "removed");
     print_list("denied tools added", "denied_tools", "added");
     print_list("denied tools removed", "denied_tools", "removed");
+    print_list("model added", "model_preferences", "added");
+    print_list("model changed", "model_preferences", "changed");
+    print_list("model removed", "model_preferences", "removed");
 
     if diff
         .get("custom_instructions_changed")
