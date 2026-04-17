@@ -39,3 +39,17 @@ email = ["dep:lettre"]
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 wiremock.workspace = true
+tempfile = "3"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "token_counting"
+harness = false
+
+[[bench]]
+name = "jsonl_parsing"
+harness = false
+
+[[bench]]
+name = "mcp_proxy_overhead"
+harness = false
