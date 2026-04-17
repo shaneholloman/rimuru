@@ -86,9 +86,10 @@ pub fn aggregate(
             Some(u) => u,
             None => continue,
         };
-        let matches_team = r.team_id.as_deref() == Some(team_id);
-        let known_member = by_user.contains_key(user);
-        if !matches_team && !known_member {
+        // Strict team binding: a record is only counted when its team_id matches
+        // the requested team. Membership alone is not sufficient (a user can be
+        // on multiple teams; spend on team A must not show up on team B).
+        if r.team_id.as_deref() != Some(team_id) {
             continue;
         }
         if let Some(s) = since
@@ -102,11 +103,15 @@ pub fn aggregate(
             continue;
         }
 
+        // Enrich display_name from known members when creating a new entry for
+        // an ad-hoc user (e.g. a cost record tagged with team_id but the user
+        // has not been explicitly added via add_user).
+        let display_from_member = by_user.get(user).and_then(|b| b.display_name.clone());
         let entry = by_user
             .entry(user.clone())
             .or_insert_with(|| UserBreakdown {
                 user_id: user.clone(),
-                display_name: None,
+                display_name: display_from_member,
                 total_cost: 0.0,
                 total_input_tokens: 0,
                 total_output_tokens: 0,
@@ -164,10 +169,22 @@ fn register_create(iii: &III, kv: &StateKV) {
                 authorize(&input)?;
                 let body = extract_input(input);
                 let name = require_str(&body, "name")?;
-                let budget_limit = body
-                    .get("budget_limit")
-                    .and_then(|v| v.as_f64())
-                    .filter(|n| n.is_finite() && *n >= 0.0);
+                let budget_limit = match body.get("budget_limit") {
+                    None | Some(Value::Null) => None,
+                    Some(v) => {
+                        let n = v.as_f64().ok_or_else(|| {
+                            IIIError::Handler(
+                                "budget_limit must be a non-negative finite number".into(),
+                            )
+                        })?;
+                        if !n.is_finite() || n < 0.0 {
+                            return Err(IIIError::Handler(
+                                "budget_limit must be a non-negative finite number".into(),
+                            ));
+                        }
+                        Some(n)
+                    }
+                };
 
                 let team = Team {
                     id: Uuid::new_v4().to_string(),
@@ -380,6 +397,34 @@ mod tests {
         };
         let token = encode_hs256(&claims, secret).unwrap();
         assert!(verify_hs256(&token, secret).is_err());
+    }
+
+    #[test]
+    fn aggregate_does_not_double_count_cross_team_spend() {
+        // alice is a member of both t1 and t2. Records tagged team=t2 must not
+        // bleed into t1's totals even though alice is a known member of t1.
+        let t1_members = vec![TeamMember {
+            team_id: "t1".into(),
+            user_id: "alice".into(),
+            display_name: Some("Alice".into()),
+            joined_at: Utc::now(),
+        }];
+        let records = vec![
+            sample_record("alice", Some("t1"), 1.0),
+            sample_record("alice", Some("t2"), 99.0),
+            sample_record("alice", None, 42.0),
+        ];
+
+        let agg = aggregate(&t1_members, &records, "t1", None, None);
+        assert_eq!(agg.total_records, 1, "only t1-tagged records count");
+        assert!(
+            (agg.grand_total - 1.0).abs() < 1e-9,
+            "grand_total must exclude t2 and untagged spend, got {}",
+            agg.grand_total
+        );
+        let alice = agg.per_user.iter().find(|u| u.user_id == "alice").unwrap();
+        assert!((alice.total_cost - 1.0).abs() < 1e-9);
+        assert_eq!(alice.record_count, 1);
     }
 
     #[test]
