@@ -187,3 +187,83 @@ async fn collect_cpu_linux() -> f64 {
         0.0
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extract_input_merges_body_with_path_params() {
+        let input = json!({
+            "body": {"other": "value"},
+            "path_params": {"id": "42"},
+        });
+        let merged = extract_input(input);
+        assert_eq!(merged["id"], "42");
+        assert_eq!(merged["other"], "value");
+    }
+
+    #[test]
+    fn extract_input_body_overrides_query_on_conflict() {
+        let input = json!({
+            "body": {"k": "from_body"},
+            "query_params": {"k": "from_query"},
+        });
+        let merged = extract_input(input);
+        assert_eq!(merged["k"], "from_body");
+    }
+
+    #[test]
+    fn extract_input_passthrough_when_no_params() {
+        let input = json!({"direct": true});
+        assert_eq!(extract_input(input.clone()), input);
+    }
+
+    #[test]
+    fn api_response_wraps_body_with_200() {
+        let r = api_response(json!({"ok": true}));
+        assert_eq!(r["status_code"], 200);
+        assert_eq!(r["body"]["ok"], true);
+    }
+
+    #[test]
+    fn require_str_returns_err_when_missing() {
+        let err = require_str(&json!({}), "name").unwrap_err();
+        assert!(err.to_string().contains("name"));
+    }
+
+    #[test]
+    fn require_str_returns_value_when_present() {
+        let got = require_str(&json!({"name": "alice"}), "name").unwrap();
+        assert_eq!(got, "alice");
+    }
+
+    #[test]
+    fn require_uuid_parses_valid_uuid() {
+        let id = "00000000-0000-0000-0000-000000000001";
+        let parsed = require_uuid(&json!({"id": id}), "id").unwrap();
+        assert_eq!(parsed.to_string(), id);
+    }
+
+    #[test]
+    fn require_uuid_rejects_bad_uuid() {
+        let err = require_uuid(&json!({"id": "nope"}), "id").unwrap_err();
+        assert!(err.to_string().contains("invalid UUID"));
+    }
+
+    #[test]
+    fn parse_vm_stat_value_parses_trailing_dot() {
+        assert_eq!(
+            parse_vm_stat_value("Pages active:                1234."),
+            1234
+        );
+        assert_eq!(parse_vm_stat_value("no colon"), 0);
+    }
+
+    #[test]
+    fn parse_meminfo_kb_extracts_number() {
+        assert_eq!(parse_meminfo_kb("MemTotal:       16384000 kB"), 16384000);
+        assert_eq!(parse_meminfo_kb(""), 0);
+    }
+}

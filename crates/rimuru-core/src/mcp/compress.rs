@@ -397,3 +397,115 @@ impl TreeNode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn short_input_returns_none_strategy() {
+        let input = json!({"foo": "bar"});
+        let result = compress(&input, CompressionStrategy::Auto, 10_000);
+        assert_eq!(result.strategy_used, "none");
+        assert_eq!(result.compressed, input);
+        assert_eq!(result.savings_percent, 0.0);
+    }
+
+    #[test]
+    fn truncate_shrinks_large_string() {
+        let big = "x".repeat(10_000);
+        let input = Value::String(big);
+        let result = compress(&input, CompressionStrategy::Truncate, 100);
+        assert!(result.compressed_tokens <= result.original_tokens);
+        assert!(result.strategy_used.contains("truncate"));
+        assert!(result.savings_percent > 0.0);
+    }
+
+    #[test]
+    fn summarize_keeps_head_and_tail() {
+        let lines: Vec<String> = (0..100).map(|i| format!("line {i}")).collect();
+        let input = Value::String(lines.join("\n"));
+        let result = compress(&input, CompressionStrategy::Summarize, 50);
+        let text = result.compressed.as_str().unwrap_or("");
+        assert!(text.contains("line 0"), "head missing: {text}");
+        assert!(text.contains("line 99"), "tail missing: {text}");
+        assert!(
+            text.contains("lines removed") || result.strategy_used == "truncate_fallback",
+            "expected summary marker or fallback, got: {}",
+            result.strategy_used
+        );
+    }
+
+    #[test]
+    fn errors_only_keeps_error_lines() {
+        let mut lines = Vec::new();
+        for i in 0..20 {
+            lines.push(format!("ok line {i}"));
+        }
+        lines.push("ERROR: something went wrong".to_string());
+        lines.push("traceback (most recent call last):".to_string());
+        for i in 0..20 {
+            lines.push(format!("tail line {i}"));
+        }
+        let input = Value::String(lines.join("\n"));
+        let result = compress(&input, CompressionStrategy::ErrorsOnly, 50);
+        let text = result.compressed.as_str().unwrap_or("");
+        assert!(text.to_lowercase().contains("error"));
+        assert!(text.contains("traceback"));
+        assert!(text.contains("errors_only"));
+    }
+
+    #[test]
+    fn tree_view_builds_file_tree() {
+        let listing = "src/main.rs\nsrc/lib.rs\nsrc/adapters/mod.rs\n";
+        let input = Value::String(listing.to_string());
+        let result = compress(&input, CompressionStrategy::TreeView, 1_000_000);
+        let text = result.compressed.as_str().unwrap_or("");
+        assert!(text.contains("src"));
+        assert!(text.contains("main.rs"));
+    }
+
+    #[test]
+    fn json_paths_truncates_big_array() {
+        let arr: Vec<Value> = (0..50).map(|i| json!({"i": i})).collect();
+        let input = json!({"items": arr});
+        let result = compress(&input, CompressionStrategy::JsonPaths, 1);
+        assert!(result.compressed_tokens < result.original_tokens);
+    }
+
+    #[test]
+    fn auto_picks_errors_only_when_many_errors() {
+        let lines: Vec<String> = (0..10).map(|i| format!("error {i}: failed")).collect();
+        let tokens = estimate_tokens(&Value::String(lines.join("\n")));
+        let chosen = pick_strategy(&Value::String(lines.join("\n")), tokens);
+        assert_eq!(chosen, CompressionStrategy::ErrorsOnly);
+    }
+
+    #[test]
+    fn safe_truncate_handles_multibyte() {
+        let s = "日本語テスト";
+        let truncated = safe_truncate_chars(s, 3);
+        assert_eq!(truncated, "日本語");
+    }
+
+    #[test]
+    fn zero_original_tokens_no_division_panic() {
+        let input = Value::Null;
+        let result = compress(&input, CompressionStrategy::Auto, 100);
+        assert_eq!(result.strategy_used, "none");
+        assert_eq!(result.savings_percent, 0.0);
+    }
+
+    #[test]
+    fn has_error_lines_requires_two_hits() {
+        assert!(!has_error_lines("just one error line"));
+        assert!(has_error_lines("first error\nsecond warning"));
+    }
+
+    #[test]
+    fn looks_like_file_listing_detects_paths() {
+        assert!(looks_like_file_listing("src/a.rs\nsrc/b.rs\nsrc/c.rs"));
+        assert!(!looks_like_file_listing("just some prose without paths"));
+    }
+}

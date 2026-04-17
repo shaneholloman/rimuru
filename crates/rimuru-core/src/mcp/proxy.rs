@@ -439,3 +439,122 @@ fn sha256_short(input: &str) -> String {
     input.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
 }
+
+impl McpProxy {
+    /// Inject synthetic tools into the index without spawning a client.
+    /// Useful for testing and benchmarking list/search/routing behaviour.
+    #[doc(hidden)]
+    pub async fn seed_tools_for_test(&self, server: &str, tools: Vec<McpTool>) {
+        let mut idx = self.tool_index.write().await;
+        for tool in tools {
+            let key = format!("{}::{}", server, tool.name);
+            idx.insert(key, (server.to_string(), tool));
+        }
+    }
+
+    #[doc(hidden)]
+    pub async fn cache_len(&self) -> usize {
+        self.cache.read().await.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn tool(name: &str, desc: &str) -> McpTool {
+        McpTool {
+            name: name.to_string(),
+            description: Some(desc.to_string()),
+            input_schema: Some(json!({
+                "type": "object",
+                "properties": {"x": {"type": "string"}},
+            })),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_tools_progressive_hides_schemas_over_threshold() {
+        let proxy = McpProxy::new();
+        let tools: Vec<_> = (0..20)
+            .map(|i| tool(&format!("t{i}"), &format!("desc {i}")))
+            .collect();
+        proxy.seed_tools_for_test("srv", tools).await;
+
+        let entries = proxy.list_tools(Some("srv"), true, 5).await;
+        assert_eq!(entries.len(), 20);
+        assert!(
+            entries.iter().all(|e| e.input_schema.is_none()),
+            "progressive should strip schemas above threshold"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_tools_non_progressive_includes_schemas() {
+        let proxy = McpProxy::new();
+        proxy
+            .seed_tools_for_test("srv", vec![tool("hello", "say hi")])
+            .await;
+
+        let entries = proxy.list_tools(Some("srv"), false, 10).await;
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].input_schema.is_some());
+        assert!(entries[0].schema_tokens > 0);
+    }
+
+    #[tokio::test]
+    async fn search_tools_ranks_name_matches_above_desc_only() {
+        let proxy = McpProxy::new();
+        proxy
+            .seed_tools_for_test(
+                "srv",
+                vec![
+                    tool("search_foo", "does things"),
+                    tool("unrelated", "description mentions search"),
+                    tool("totally_different", "nothing here"),
+                ],
+            )
+            .await;
+
+        let results = proxy.search_tools("search", 5).await;
+        assert!(!results.is_empty());
+        // name match scores higher than description-only match
+        assert_eq!(results[0].name, "srv::search_foo");
+    }
+
+    #[tokio::test]
+    async fn search_tools_respects_limit() {
+        let proxy = McpProxy::new();
+        proxy
+            .seed_tools_for_test(
+                "srv",
+                vec![
+                    tool("alpha_search", "doc"),
+                    tool("beta_search", "doc"),
+                    tool("gamma_search", "doc"),
+                ],
+            )
+            .await;
+        let results = proxy.search_tools("search", 2).await;
+        assert_eq!(results.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn search_tools_returns_empty_for_no_match() {
+        let proxy = McpProxy::new();
+        proxy
+            .seed_tools_for_test("srv", vec![tool("foo", "bar")])
+            .await;
+        let results = proxy.search_tools("zzzzzz_no_match", 5).await;
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn sha256_short_stable_length() {
+        let h = sha256_short("hello");
+        assert_eq!(h.len(), 16);
+        assert_eq!(h, sha256_short("hello"));
+        assert_ne!(h, sha256_short("world"));
+    }
+}
