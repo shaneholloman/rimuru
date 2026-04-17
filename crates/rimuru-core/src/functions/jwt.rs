@@ -96,12 +96,10 @@ pub fn verify_hs256(token: &str, secret: &[u8]) -> Result<Claims, JwtError> {
 
 pub fn encode_hs256(claims: &Claims, secret: &[u8]) -> Result<String, JwtError> {
     let header = serde_json::json!({"alg": "HS256", "typ": "JWT"});
-    let header_b64 = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&header).map_err(|e| JwtError::Encoding(e.to_string()))?,
-    );
-    let payload_b64 = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(claims).map_err(|e| JwtError::Encoding(e.to_string()))?,
-    );
+    let header_b64 = URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&header).map_err(|e| JwtError::Encoding(e.to_string()))?);
+    let payload_b64 = URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(claims).map_err(|e| JwtError::Encoding(e.to_string()))?);
     let signing_input = format!("{}.{}", header_b64, payload_b64);
     let mut mac = HmacSha256::new_from_slice(secret).map_err(|_| JwtError::BadSignature)?;
     mac.update(signing_input.as_bytes());

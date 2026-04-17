@@ -149,10 +149,8 @@ fn register_record(iii: &III, kv: &StateKV) {
                             ));
                         }
                         record.user_id = claim_user.or_else(|| client_user.map(String::from));
-                        record.team_id = c
-                            .team_id
-                            .clone()
-                            .or_else(|| client_team.map(String::from));
+                        record.team_id =
+                            c.team_id.clone().or_else(|| client_team.map(String::from));
                     }
                     None => {
                         if let Some(u) = client_user {

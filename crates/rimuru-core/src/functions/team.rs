@@ -193,9 +193,7 @@ fn register_create(iii: &III, kv: &StateKV) {
                     budget_limit,
                 };
 
-                kv.set(TEAM_SCOPE, &team.id, &team)
-                    .await
-                    .map_err(kv_err)?;
+                kv.set(TEAM_SCOPE, &team.id, &team).await.map_err(kv_err)?;
 
                 Ok(api_response(json!(team)))
             }
