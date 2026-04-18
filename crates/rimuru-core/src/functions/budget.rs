@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::sysutil::{api_response, extract_input, kv_err};
+use super::webhook::{load_webhook_url, post_webhook};
 use crate::models::CostRecord;
 use crate::state::StateKV;
 
@@ -153,8 +154,9 @@ fn register_check(iii: &III, kv: &StateKV) {
                 let mut warnings: Vec<String> = Vec::new();
                 let mut exceeded = false;
                 let mut warning = false;
+                let mut breached: Option<(&'static str, f64, f64)> = None;
 
-                let checks: [(&str, f64, Option<f64>); 4] = [
+                let checks: [(&'static str, f64, Option<f64>); 4] = [
                     ("Monthly", monthly_limit, Some(monthly_spent)),
                     ("Daily", daily_limit, Some(daily_spent)),
                     ("Session", session_limit, session_spent),
@@ -175,6 +177,10 @@ fn register_check(iii: &III, kv: &StateKV) {
                             "{} budget exceeded: ${:.2} / ${:.2}",
                             label, spent, limit
                         ));
+                        let current_is_exceeded = matches!(breached, Some((_, s, l)) if s >= l);
+                        if !current_is_exceeded {
+                            breached = Some((label, spent, limit));
+                        }
                     } else if spent >= limit * alert_threshold {
                         if status != "exceeded" {
                             status = "warning".to_string();
@@ -187,6 +193,9 @@ fn register_check(iii: &III, kv: &StateKV) {
                             limit,
                             spent / limit * 100.0
                         ));
+                        if breached.is_none() {
+                            breached = Some((label, spent, limit));
+                        }
                     }
                 }
 
@@ -238,6 +247,32 @@ fn register_check(iii: &III, kv: &StateKV) {
                         .await
                     {
                         tracing::warn!("failed to dispatch {} event: {}", event_type, e);
+                    }
+
+                    if let Some(url) = load_webhook_url(&kv, "webhooks.budget_url").await {
+                        let (scope_label, breached_spent, breached_limit) =
+                            breached.unwrap_or(("Monthly", monthly_spent, monthly_limit));
+                        let percent = if breached_limit > 0.0 {
+                            breached_spent / breached_limit * 100.0
+                        } else {
+                            0.0
+                        };
+                        let agent = input
+                            .get("agent_id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let webhook_payload = json!({
+                            "event": event_type,
+                            "level": status,
+                            "scope": scope_label,
+                            "current_spend": breached_spent,
+                            "limit": breached_limit,
+                            "percent": percent,
+                            "agent": agent,
+                            "timestamp": Utc::now().to_rfc3339(),
+                        });
+                        post_webhook(&url, &webhook_payload).await;
                     }
                 }
 
