@@ -34,6 +34,12 @@ impl ClaudeCodeAdapter {
         }
     }
 
+    /// Test/bench helper: override the `~/.claude` directory without mangling env vars.
+    #[doc(hidden)]
+    pub fn set_config_path_for_bench(&mut self, path: PathBuf) {
+        self.config_path = path;
+    }
+
     fn projects_dir(&self) -> PathBuf {
         self.config_path.join("projects")
     }
@@ -644,5 +650,173 @@ impl AdapterCore for ClaudeCodeAdapter {
 
     fn estimate_cost_for_model(&self, model: &str, input_tokens: u64, output_tokens: u64) -> f64 {
         Self::estimate_cost(model, input_tokens, output_tokens)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn estimate_cost_sonnet_basic() {
+        // 1M in, 1M out on sonnet = $3 + $15 = $18
+        let cost = ClaudeCodeAdapter::estimate_cost("claude-sonnet-4-5", 1_000_000, 1_000_000);
+        assert!((cost - 18.0).abs() < 0.001, "got {cost}");
+    }
+
+    #[test]
+    fn estimate_cost_haiku_3_not_confused_with_haiku_3_5() {
+        // Haiku 3: $0.25 input / $1.25 output
+        let h3 = ClaudeCodeAdapter::estimate_cost("claude-haiku-3", 1_000_000, 1_000_000);
+        // Haiku 3.5: $0.80 input / $4.00 output
+        let h35 = ClaudeCodeAdapter::estimate_cost("claude-haiku-3-5", 1_000_000, 1_000_000);
+        assert!((h3 - 1.5).abs() < 0.001, "haiku-3 expected 1.5, got {h3}");
+        assert!(
+            (h35 - 4.8).abs() < 0.001,
+            "haiku-3-5 expected 4.8, got {h35}"
+        );
+        assert!(h3 < h35, "haiku-3 must be cheaper than haiku-3-5");
+    }
+
+    #[test]
+    fn estimate_cost_opus_variants() {
+        let opus_46 = ClaudeCodeAdapter::estimate_cost("claude-opus-4-6", 1_000_000, 1_000_000);
+        let opus_4 = ClaudeCodeAdapter::estimate_cost("claude-opus-4", 1_000_000, 1_000_000);
+        // Opus 4.6 = $5 + $25 = $30; Opus 4 = $15 + $75 = $90
+        assert!((opus_46 - 30.0).abs() < 0.001);
+        assert!((opus_4 - 90.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn estimate_cost_fast_mode_opus_46_multiplier() {
+        let normal = ClaudeCodeAdapter::estimate_cost_full(
+            "claude-opus-4-6",
+            1_000_000,
+            1_000_000,
+            0,
+            0,
+            0,
+            false,
+        );
+        let fast = ClaudeCodeAdapter::estimate_cost_full(
+            "claude-opus-4-6",
+            1_000_000,
+            1_000_000,
+            0,
+            0,
+            0,
+            true,
+        );
+        assert!(
+            (fast / normal - 6.0).abs() < 0.01,
+            "expected 6x, got {fast}/{normal}"
+        );
+    }
+
+    #[test]
+    fn estimate_cost_zero_tokens() {
+        let cost = ClaudeCodeAdapter::estimate_cost("claude-sonnet-4-5", 0, 0);
+        assert_eq!(cost, 0.0);
+    }
+
+    #[test]
+    fn estimate_cost_web_search_charged_per_request() {
+        let cost =
+            ClaudeCodeAdapter::estimate_cost_full("claude-sonnet-4-5", 0, 0, 0, 0, 10, false);
+        assert!(
+            (cost - 0.10).abs() < 0.0001,
+            "web search $0.01 * 10 = $0.10, got {cost}"
+        );
+    }
+
+    #[test]
+    fn classify_tool_tokens_bucketizes_known_tools() {
+        let mut b = ContextBreakdown::new(Uuid::nil());
+        ClaudeCodeAdapter::classify_tool_tokens("Bash", 100, 50, &mut b);
+        assert_eq!(b.bash_output_tokens, 150);
+
+        let mut b2 = ContextBreakdown::new(Uuid::nil());
+        ClaudeCodeAdapter::classify_tool_tokens("Read", 100, 50, &mut b2);
+        assert_eq!(b2.file_read_tokens, 150);
+
+        let mut b3 = ContextBreakdown::new(Uuid::nil());
+        ClaudeCodeAdapter::classify_tool_tokens("mcp_github_search", 10, 20, &mut b3);
+        assert_eq!(b3.mcp_tokens, 30);
+    }
+
+    #[test]
+    fn parse_session_jsonl_full_reads_fixture() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let projects = dir.path().join(".claude").join("projects").join("proj1");
+        std::fs::create_dir_all(&projects).unwrap();
+
+        let session_id = "11111111-1111-1111-1111-111111111111";
+        let jsonl_path = projects.join(format!("{session_id}.jsonl"));
+        let mut f = std::fs::File::create(&jsonl_path).unwrap();
+        let lines = vec![
+            serde_json::json!({
+                "timestamp": "2026-01-01T00:00:00Z",
+                "sessionId": session_id,
+                "message": {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "hello"}],
+                }
+            }),
+            serde_json::json!({
+                "timestamp": "2026-01-01T00:00:05Z",
+                "message": {
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-5",
+                    "usage": {"input_tokens": 100, "output_tokens": 50},
+                    "content": [{"type": "text", "text": "world"}],
+                }
+            }),
+        ];
+        for l in &lines {
+            writeln!(f, "{}", serde_json::to_string(l).unwrap()).unwrap();
+        }
+        drop(f);
+
+        let mut adapter = ClaudeCodeAdapter::new();
+        adapter.set_config_path_for_bench(dir.path().join(".claude"));
+
+        let (session, _breakdown) = adapter.parse_session_jsonl_full(&jsonl_path).unwrap();
+        assert_eq!(session.input_tokens, 100);
+        assert_eq!(session.output_tokens, 50);
+        assert_eq!(session.model.as_deref(), Some("claude-sonnet-4-5"));
+        assert!(session.total_cost > 0.0);
+    }
+
+    #[test]
+    fn parse_session_jsonl_rejects_malformed_lines_gracefully() {
+        use std::io::Write;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let projects = dir.path().join(".claude").join("projects").join("proj1");
+        std::fs::create_dir_all(&projects).unwrap();
+        let session_id = "22222222-2222-2222-2222-222222222222";
+        let jsonl_path = projects.join(format!("{session_id}.jsonl"));
+        let mut f = std::fs::File::create(&jsonl_path).unwrap();
+        writeln!(f, "this is not json").unwrap();
+        writeln!(
+            f,
+            "{}",
+            serde_json::to_string(&serde_json::json!({
+                "message": {
+                    "role": "assistant",
+                    "usage": {"input_tokens": 5, "output_tokens": 2},
+                    "content": [],
+                }
+            }))
+            .unwrap()
+        )
+        .unwrap();
+        drop(f);
+
+        let mut adapter = ClaudeCodeAdapter::new();
+        adapter.set_config_path_for_bench(dir.path().join(".claude"));
+        let (session, _b) = adapter.parse_session_jsonl_full(&jsonl_path).unwrap();
+        assert_eq!(session.input_tokens, 5);
+        assert_eq!(session.output_tokens, 2);
     }
 }

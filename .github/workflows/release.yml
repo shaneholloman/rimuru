@@ -74,118 +74,44 @@ jobs:
           name: ui-dist
           path: ui/dist/
 
-  build-linux:
-    name: Build (Linux x64)
-    runs-on: ubuntu-latest
+  build-binaries:
+    name: Build ${{ matrix.label }}
     needs: [create-release, build-ui]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x64
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - label: linux-arm64
+            runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+          - label: macos-x64
+            runner: macos-13
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - label: macos-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
+            archive: tar.gz
+          - label: windows-x64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
 
-      - name: Download UI dist
-        uses: actions/download-artifact@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          name: ui-dist
-          path: ui/dist/
+          targets: ${{ matrix.target }}
 
-      - name: Build
-        run: cargo build --release -p rimuru-core -p rimuru-cli -p rimuru-tui
-
-      - name: Create tarball
-        run: |
-          mkdir -p dist
-          cp target/release/rimuru-worker target/release/rimuru target/release/rimuru-tui dist/
-          cp README.md LICENSE dist/ 2>/dev/null || true
-          cd dist && tar -czvf ../rimuru-${{ needs.create-release.outputs.version }}-linux-x64.tar.gz *
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: rimuru-${{ needs.create-release.outputs.version }}-linux-x64.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos:
-    name: Build (macOS x64)
-    runs-on: macos-latest
-    needs: [create-release, build-ui]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Download UI dist
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: ui/dist/
-
-      - name: Build
-        run: cargo build --release -p rimuru-core -p rimuru-cli -p rimuru-tui
-
-      - name: Create tarball
-        run: |
-          mkdir -p dist
-          cp target/release/rimuru-worker target/release/rimuru target/release/rimuru-tui dist/
-          cp README.md LICENSE dist/ 2>/dev/null || true
-          cd dist && tar -czvf ../rimuru-${{ needs.create-release.outputs.version }}-macos-x64.tar.gz *
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: rimuru-${{ needs.create-release.outputs.version }}-macos-x64.tar.gz
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-windows:
-    name: Build (Windows x64)
-    runs-on: windows-latest
-    needs: [create-release, build-ui]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Download UI dist
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-dist
-          path: ui/dist/
-
-      - name: Build
-        run: cargo build --release -p rimuru-core -p rimuru-cli -p rimuru-tui
-
-      - name: Create zip
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path dist
-          Copy-Item target\release\rimuru-worker.exe dist\
-          Copy-Item target\release\rimuru.exe dist\
-          Copy-Item target\release\rimuru-tui.exe dist\
-          if (Test-Path README.md) { Copy-Item README.md dist\ }
-          if (Test-Path LICENSE) { Copy-Item LICENSE dist\ }
-          Compress-Archive -Path dist\* -DestinationPath rimuru-${{ needs.create-release.outputs.version }}-windows-x64.zip
-
-      - name: Upload release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-release.outputs.version }}
-          files: rimuru-${{ needs.create-release.outputs.version }}-windows-x64.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-desktop-linux:
-    name: Desktop (Linux AppImage)
-    runs-on: ubuntu-latest
-    needs: [create-release, build-ui]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install system dependencies
+      - name: Install Linux system deps
+        if: startsWith(matrix.runner, 'ubuntu')
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
@@ -196,28 +122,85 @@ jobs:
           name: ui-dist
           path: ui/dist/
 
-      - name: Build Tauri app
-        working-directory: crates/rimuru-desktop
-        run: npx @tauri-apps/cli build --bundles appimage
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }} -p rimuru-core -p rimuru-cli -p rimuru-tui
 
-      - name: Upload AppImage
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/rimuru-worker dist/
+          cp target/${{ matrix.target }}/release/rimuru dist/
+          cp target/${{ matrix.target }}/release/rimuru-tui dist/
+          cp README.md LICENSE dist/ 2>/dev/null || true
+          cd dist && tar -czvf ../rimuru-${{ needs.create-release.outputs.version }}-${{ matrix.label }}.tar.gz *
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item target\${{ matrix.target }}\release\rimuru-worker.exe dist\
+          Copy-Item target\${{ matrix.target }}\release\rimuru.exe dist\
+          Copy-Item target\${{ matrix.target }}\release\rimuru-tui.exe dist\
+          if (Test-Path README.md) { Copy-Item README.md dist\ }
+          if (Test-Path LICENSE) { Copy-Item LICENSE dist\ }
+          Compress-Archive -Path dist\* -DestinationPath rimuru-${{ needs.create-release.outputs.version }}-${{ matrix.label }}.zip
+
+      - name: Upload release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.create-release.outputs.version }}
-          files: target/release/bundle/appimage/*.AppImage
+          files: |
+            rimuru-${{ needs.create-release.outputs.version }}-${{ matrix.label }}.${{ matrix.archive }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-desktop-macos:
-    name: Desktop (macOS DMG)
-    runs-on: macos-latest
+  build-desktop:
+    name: Desktop ${{ matrix.label }}
     needs: [create-release, build-ui]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-appimage
+            runner: ubuntu-22.04
+            bundle: appimage
+            asset_glob: target/release/bundle/appimage/*.AppImage
+          - label: linux-deb
+            runner: ubuntu-22.04
+            bundle: deb
+            asset_glob: target/release/bundle/deb/*.deb
+          - label: macos-dmg-x64
+            runner: macos-13
+            bundle: dmg
+            asset_glob: target/release/bundle/dmg/*.dmg
+          - label: macos-dmg-arm64
+            runner: macos-14
+            bundle: dmg
+            asset_glob: target/release/bundle/dmg/*.dmg
+          - label: windows-msi
+            runner: windows-latest
+            bundle: msi
+            asset_glob: target/release/bundle/msi/*.msi
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
+
+      - name: Install Linux system deps
+        if: startsWith(matrix.runner, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Download UI dist
         uses: actions/download-artifact@v4
@@ -225,15 +208,16 @@ jobs:
           name: ui-dist
           path: ui/dist/
 
-      - name: Build Tauri app
+      - name: Build Tauri bundle
         working-directory: crates/rimuru-desktop
-        run: npx @tauri-apps/cli build --bundles dmg
+        shell: bash
+        run: npx -p @tauri-apps/cli@^2.1.0 -y tauri build --bundles ${{ matrix.bundle }}
 
-      - name: Upload DMG
+      - name: Upload bundle
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.create-release.outputs.version }}
-          files: target/release/bundle/dmg/*.dmg
+          files: ${{ matrix.asset_glob }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -291,20 +275,14 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - create-release
-      - build-linux
-      - build-macos
-      - build-windows
-      - build-desktop-linux
-      - build-desktop-macos
+      - build-binaries
+      - build-desktop
       - docker
     if: always()
     steps:
       - name: Summary
         run: |
           echo "Release ${{ needs.create-release.outputs.version }} completed!"
-          echo "  Linux: ${{ needs.build-linux.result }}"
-          echo "  macOS: ${{ needs.build-macos.result }}"
-          echo "  Windows: ${{ needs.build-windows.result }}"
-          echo "  Desktop Linux: ${{ needs.build-desktop-linux.result }}"
-          echo "  Desktop macOS: ${{ needs.build-desktop-macos.result }}"
+          echo "  Binaries: ${{ needs.build-binaries.result }}"
+          echo "  Desktop bundles: ${{ needs.build-desktop.result }}"
           echo "  Docker: ${{ needs.docker.result }}"

@@ -149,3 +149,26 @@ pub use kiro::KiroAdapter;
 pub use opencode::OpenCodeAdapter;
 pub use roo::RooAdapter;
 pub use windsurf::WindsurfAdapter;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn binary_on_path_finds_obvious_binary() {
+        // every POSIX system has at least one of these
+        let candidates: &[&str] = if cfg!(windows) {
+            &["cmd"]
+        } else {
+            &["sh", "ls"]
+        };
+        assert!(binary_on_path(candidates));
+    }
+
+    #[test]
+    fn binary_on_path_rejects_garbage() {
+        assert!(!binary_on_path(&[
+            "definitely_not_a_binary_rimuru_test_xyz"
+        ]));
+    }
+}
