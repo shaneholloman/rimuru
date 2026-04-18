@@ -117,11 +117,23 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-coverage-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-coverage-
+            ${{ runner.os }}-cargo-
+
       - name: Create UI dist stub
         run: mkdir -p ui/dist && echo '<html></html>' > ui/dist/index.html
 
       - name: Generate coverage summary
-        run: cargo llvm-cov --workspace --summary-only | tee coverage-summary.txt
+        run: cargo llvm-cov --workspace --summary-only --exclude rimuru-desktop | tee coverage-summary.txt
 
       - name: Upload coverage summary
         uses: actions/upload-artifact@v4

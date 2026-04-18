@@ -22,20 +22,16 @@ fn bench_list_and_search(c: &mut Criterion) {
     });
 
     c.bench_function("list_tools_500_progressive", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                let _ = proxy
-                    .list_tools(black_box(Some("bench_server")), true, 10)
-                    .await;
-            });
+        b.to_async(&rt).iter(|| async {
+            let _ = proxy
+                .list_tools(black_box(Some("bench_server")), true, 10)
+                .await;
         })
     });
 
     c.bench_function("search_tools_500_keyword", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                let _ = proxy.search_tools(black_box("alpha"), 10).await;
-            });
+        b.to_async(&rt).iter(|| async {
+            let _ = proxy.search_tools(black_box("alpha"), 10).await;
         })
     });
 }

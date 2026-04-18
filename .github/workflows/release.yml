@@ -211,7 +211,7 @@ jobs:
       - name: Build Tauri bundle
         working-directory: crates/rimuru-desktop
         shell: bash
-        run: npx @tauri-apps/cli build --bundles ${{ matrix.bundle }}
+        run: npx -p @tauri-apps/cli@^2.1.0 -y tauri build --bundles ${{ matrix.bundle }}
 
       - name: Upload bundle
         uses: softprops/action-gh-release@v2

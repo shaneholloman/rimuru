@@ -779,7 +779,7 @@ mod tests {
         drop(f);
 
         let mut adapter = ClaudeCodeAdapter::new();
-        adapter.config_path = dir.path().join(".claude");
+        adapter.set_config_path_for_bench(dir.path().join(".claude"));
 
         let (session, _breakdown) = adapter.parse_session_jsonl_full(&jsonl_path).unwrap();
         assert_eq!(session.input_tokens, 100);
@@ -814,7 +814,7 @@ mod tests {
         drop(f);
 
         let mut adapter = ClaudeCodeAdapter::new();
-        adapter.config_path = dir.path().join(".claude");
+        adapter.set_config_path_for_bench(dir.path().join(".claude"));
         let (session, _b) = adapter.parse_session_jsonl_full(&jsonl_path).unwrap();
         assert_eq!(session.input_tokens, 5);
         assert_eq!(session.output_tokens, 2);

@@ -28,12 +28,7 @@ fn build_fixture(lines: usize) -> (tempfile::TempDir, std::path::PathBuf) {
 fn bench_claude_code_parse(c: &mut Criterion) {
     let (_dir, path) = build_fixture(1_000);
 
-    let adapter = {
-        let mut a = ClaudeCodeAdapter::new();
-        // writeable because bench lives in same crate
-        a.set_config_path_for_bench(_dir.path().join(".claude"));
-        a
-    };
+    let adapter = ClaudeCodeAdapter::new();
 
     c.bench_function("parse_claude_code_1000_lines", |b| {
         b.iter(|| {
