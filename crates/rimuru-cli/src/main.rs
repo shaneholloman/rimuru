@@ -415,6 +415,9 @@ async fn main() -> Result<()> {
                 to,
                 output,
             } => {
+                if matches!(period, ExportPeriod::Custom) && (from.is_none() || to.is_none()) {
+                    anyhow::bail!("--period custom requires both --from and --to");
+                }
                 commands::costs::export(
                     &iii,
                     export_format.as_str(),
