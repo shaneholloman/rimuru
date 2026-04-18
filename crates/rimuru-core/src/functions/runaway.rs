@@ -500,6 +500,15 @@ fn register_scan(iii: &III, kv: &StateKV) {
                 });
 
                 for analysis in &flagged {
+                    let notified_key = format!("runaway_notified:{}", analysis.session_id);
+                    let prev_severity = kv
+                        .get::<f64>("runaway", &notified_key)
+                        .await
+                        .map_err(kv_err)?
+                        .unwrap_or(f64::NEG_INFINITY);
+                    if analysis.severity <= prev_severity {
+                        continue;
+                    }
                     let agent = active
                         .iter()
                         .find(|s| s.id == analysis.session_id)
@@ -511,7 +520,7 @@ fn register_scan(iii: &III, kv: &StateKV) {
                         .filter_map(|p| p.metadata.get("count").and_then(|v| v.as_u64()))
                         .max()
                         .unwrap_or(0) as u32;
-                    if let Err(e) = kv
+                    match kv
                         .iii()
                         .trigger(TriggerRequest {
                             function_id: "rimuru.hooks.dispatch".to_string(),
@@ -529,7 +538,12 @@ fn register_scan(iii: &III, kv: &StateKV) {
                         })
                         .await
                     {
-                        tracing::warn!("failed to dispatch runaway.detected event: {}", e);
+                        Ok(_) => {
+                            let _ = kv.set("runaway", &notified_key, &analysis.severity).await;
+                        }
+                        Err(e) => {
+                            tracing::warn!("failed to dispatch runaway.detected event: {}", e);
+                        }
                     }
                 }
 

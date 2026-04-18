@@ -252,28 +252,27 @@ fn register_record(iii: &III, kv: &StateKV) {
 
                 if let Some(session_id) = record.session_id {
                     let session_key = session_id.to_string();
-                    let prev_cents: i64 = kv
-                        .get::<i64>("session_cost", &session_key)
+                    let prev_total: f64 = kv
+                        .get::<f64>("session_cost", &session_key)
                         .await
                         .map_err(kv_err)?
-                        .unwrap_or(0);
-                    let new_cents = prev_cents + (record.total_cost * 100.0) as i64;
-                    kv.set("session_cost", &session_key, &new_cents)
+                        .unwrap_or(0.0);
+                    let new_total = prev_total + record.total_cost;
+                    kv.set("session_cost", &session_key, &new_total)
                         .await
                         .map_err(kv_err)?;
 
-                    let threshold = kv
+                    let threshold_dollars = kv
                         .get::<Value>("config", "notifications.session_cost_threshold")
                         .await
                         .map_err(kv_err)?
                         .and_then(|v| v.as_f64())
                         .unwrap_or(5.0);
-                    let threshold_cents = (threshold * 100.0) as i64;
-                    if threshold_cents > 0 {
-                        let prev_band = prev_cents / threshold_cents;
-                        let new_band = new_cents / threshold_cents;
+                    if threshold_dollars > 0.0 {
+                        let prev_band = (prev_total / threshold_dollars).floor() as i64;
+                        let new_band = (new_total / threshold_dollars).floor() as i64;
                         if new_band > prev_band {
-                            let milestone = new_band * threshold_cents;
+                            let milestone = new_band as f64 * threshold_dollars;
                             if let Err(e) = kv
                                 .iii()
                                 .trigger(TriggerRequest {
@@ -282,8 +281,8 @@ fn register_record(iii: &III, kv: &StateKV) {
                                         "event_type": "session.cost_milestone",
                                         "payload": {
                                             "session_id": session_key,
-                                            "cost": milestone as f64 / 100.0,
-                                            "total": new_cents as f64 / 100.0,
+                                            "cost": milestone,
+                                            "total": new_total,
                                         }
                                     }),
                                     action: None,

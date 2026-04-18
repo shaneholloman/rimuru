@@ -93,9 +93,22 @@ impl<R: Runtime> NotificationDispatcher<R> {
     }
 
     pub fn dispatch(&self, kind: &NotificationKind) -> Result<(), String> {
+        let notifier = self.app.notification();
+        match notifier.permission_state() {
+            Ok(tauri::plugin::PermissionState::Granted) => {}
+            Ok(_) => {
+                tracing::warn!(
+                    "notification dispatch skipped: permission not granted (call request_permission at startup)"
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                tracing::warn!("notification permission check failed: {e}");
+                return Err(e.to_string());
+            }
+        }
         let payload = build_notification(kind);
-        self.app
-            .notification()
+        notifier
             .builder()
             .title(&payload.title)
             .body(&payload.body)

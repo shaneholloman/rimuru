@@ -245,7 +245,7 @@ async fn fetch_tooltip(iii: &III) -> Result<String, String> {
             chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(dt, chrono::Utc).to_rfc3339()
         });
 
-    let result = iii
+    let cost_result = iii
         .trigger(TriggerRequest {
             function_id: "rimuru.costs.summary".to_string(),
             payload: json!({ "since": since }),
@@ -254,24 +254,33 @@ async fn fetch_tooltip(iii: &III) -> Result<String, String> {
         })
         .await
         .map_err(|e| e.to_string())?;
-
-    let body = result.get("body").unwrap_or(&result);
-    let summary = body.get("summary").unwrap_or(body);
+    let cost_body = cost_result.get("body").unwrap_or(&cost_result);
+    let summary = cost_body.get("summary").unwrap_or(cost_body);
     let total = summary
         .get("total_cost")
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0);
-    let sessions = summary
-        .get("total_records")
+
+    let metrics_result = iii
+        .trigger(TriggerRequest {
+            function_id: "rimuru.metrics.current".to_string(),
+            payload: json!({}),
+            action: None,
+            timeout_ms: Some(5000),
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    let metrics_body = metrics_result.get("body").unwrap_or(&metrics_result);
+    let active_sessions = metrics_body
+        .get("active_sessions")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
-    let agents = summary
-        .get("by_agent")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
+    let active_agents = metrics_body
+        .get("active_agents")
+        .and_then(|v| v.as_u64())
         .unwrap_or(0);
+
     Ok(format!(
-        "Today: ${:.2} • {} sessions • {} agents",
-        total, sessions, agents
+        "Today: ${total:.2} • {active_sessions} active sessions • {active_agents} active agents"
     ))
 }

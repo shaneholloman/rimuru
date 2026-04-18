@@ -65,6 +65,28 @@ pub fn run() {
             let app_state = AppState::new(iii.clone(), kv.clone(), api_port);
             app.manage(app_state);
 
+            {
+                use tauri::plugin::PermissionState;
+                use tauri_plugin_notification::NotificationExt;
+                let notifier = app.notification();
+                match notifier.permission_state() {
+                    Ok(PermissionState::Prompt) | Ok(PermissionState::PromptWithRationale) => {
+                        if let Err(e) = notifier.request_permission() {
+                            tracing::warn!("Failed to request notification permission: {e}");
+                        }
+                    }
+                    Ok(PermissionState::Denied) => {
+                        tracing::warn!(
+                            "Notification permission denied by OS; notifications will be suppressed"
+                        );
+                    }
+                    Ok(PermissionState::Granted) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to read notification permission: {e}");
+                    }
+                }
+            }
+
             let dispatcher = NotificationDispatcher::new(app.handle().clone());
             register_notification_dispatcher(&iii, &kv, dispatcher);
 

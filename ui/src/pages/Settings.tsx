@@ -173,6 +173,8 @@ function renderField(
   updateField: (key: keyof AppConfig, value: unknown) => void,
 ) {
   const value = form[field.key];
+  const fieldId = `field-${String(field.key).replace(/\./g, "-")}`;
+  const labelId = `${fieldId}-label`;
   return (
     <div
       key={String(field.key)}
@@ -180,7 +182,11 @@ function renderField(
     >
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex-1">
-          <label className="text-sm font-medium text-[var(--text-primary)]">
+          <label
+            id={labelId}
+            htmlFor={fieldId}
+            className="text-sm font-medium text-[var(--text-primary)]"
+          >
             {field.label}
           </label>
           <p className="text-xs text-[var(--text-secondary)] mt-0.5">
@@ -190,6 +196,11 @@ function renderField(
         <div className="w-full sm:w-48 shrink-0">
           {field.type === "boolean" ? (
             <button
+              id={fieldId}
+              type="button"
+              role="switch"
+              aria-checked={Boolean(value)}
+              aria-labelledby={labelId}
               onClick={() => updateField(field.key, !(value as boolean))}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                 value
@@ -205,6 +216,8 @@ function renderField(
             </button>
           ) : field.type === "select" ? (
             <select
+              id={fieldId}
+              aria-labelledby={labelId}
               value={String(value ?? "")}
               onChange={(e) => updateField(field.key, e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
@@ -217,6 +230,8 @@ function renderField(
             </select>
           ) : field.type === "number" ? (
             <input
+              id={fieldId}
+              aria-labelledby={labelId}
               type="number"
               value={value != null ? Number(value) : ""}
               onChange={(e) =>
@@ -229,6 +244,8 @@ function renderField(
             />
           ) : (
             <input
+              id={fieldId}
+              aria-labelledby={labelId}
               type="text"
               value={String(value ?? "")}
               onChange={(e) => updateField(field.key, e.target.value)}
